@@ -132,11 +132,15 @@ namespace ELearning_ToanHocHay_Control.Repositories.Implementations
         /// <summary>
         /// Lấy danh sách các bài học vừa hoàn thành gần đây
         /// </summary>
+        // Chỉ thay thế method GetRecentLessonsAsync trong DashboardRepository.cs
+
         public async Task<List<RecentLessonModel>> GetRecentLessonsAsync(int studentId, int limit)
         {
             var raw = await _context.ExerciseAttempts
                 .AsNoTracking()
-                .Where(a => a.StudentId == studentId && a.Status != AttemptStatus.InProgress)
+                .Where(a => a.StudentId == studentId &&
+                           a.Status != AttemptStatus.InProgress &&
+                           a.Exercise != null)          // guard: bỏ attempt mồ côi
                 .Include(a => a.Exercise)
                     .ThenInclude(e => e.Topic)
                         .ThenInclude(t => t.Chapter)
@@ -147,20 +151,24 @@ namespace ELearning_ToanHocHay_Control.Repositories.Implementations
                 .Take(limit)
                 .ToListAsync();
 
-            return raw.Select(a => new RecentLessonModel
-            {
-                LessonId = a.Exercise.Topic.Lessons.FirstOrDefault()?.LessonId ?? 0,
-                LessonName = a.Exercise.Topic.Lessons.FirstOrDefault()?.LessonName ?? "N/A",
-                TopicName = a.Exercise.Topic.TopicName,
-                ChapterName = a.Exercise.Topic.Chapter.ChapterName,
-                CompletedAt = a.SubmittedAt,
-                DurationMinutes = a.SubmittedAt.HasValue ? (int)(a.SubmittedAt.Value - a.StartTime).TotalMinutes : 0,
-                IsCompleted = true,
-                ProgressPercentage = 100,
-                Score = a.MaxScore > 0
-                    ? Math.Round((double)a.TotalScore / (double)a.MaxScore * 100.0, 1)
-                    : (double?)null
-            }).ToList();
+            return raw
+                .Where(a => a.Exercise?.Topic != null)  // lọc thêm sau khi load
+                .Select(a => new RecentLessonModel
+                {
+                    LessonId = a.Exercise.Topic.Lessons?.FirstOrDefault()?.LessonId ?? 0,
+                    LessonName = a.Exercise.Topic.Lessons?.FirstOrDefault()?.LessonName ?? a.Exercise.Topic.TopicName,
+                    TopicName = a.Exercise.Topic.TopicName ?? "N/A",
+                    ChapterName = a.Exercise.Topic.Chapter?.ChapterName ?? "N/A",  // null-safe
+                    CompletedAt = a.SubmittedAt,
+                    DurationMinutes = a.SubmittedAt.HasValue
+                        ? (int)(a.SubmittedAt.Value - a.StartTime).TotalMinutes
+                        : 0,
+                    IsCompleted = true,
+                    ProgressPercentage = 100,
+                    Score = a.MaxScore > 0
+                        ? Math.Round((double)a.TotalScore / (double)a.MaxScore * 100.0, 1)
+                        : (double?)null
+                }).ToList();
         }
 
         /// <summary>
