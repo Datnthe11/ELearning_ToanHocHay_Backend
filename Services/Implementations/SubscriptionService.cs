@@ -112,11 +112,17 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
             }
 
             var pkg = activeSubscription.Package!;
+            var name = pkg.PackageName.ToLower().Trim();
 
-            int packageType = pkg.PackageName.ToLower() switch
+            // FIX: match đúng tên trong DB
+            // "Gói Premium"      → 2
+            // "Gói tiêu chuẩn"   → 1
+            // "Gói trải nghiệm"  → 0 (free, nhưng có subscription thì vẫn active)
+            int packageType = name switch
             {
                 var n when n.Contains("premium") => 2,
-                var n when n.Contains("standard") => 1,
+                var n when n.Contains("tiêu chuẩn") || n.Contains("standard") || n.Contains("tieu chuan") => 1,
+                var n when n.Contains("trải nghiệm") || n.Contains("trai nghiem") || n.Contains("free") => 0,
                 _ => 0
             };
 
