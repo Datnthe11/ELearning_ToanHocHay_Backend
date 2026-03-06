@@ -9,6 +9,7 @@ namespace ELearning_ToanHocHay_Control.Models.DTOs.Exercise
         public int? DurationMinutes { get; set; }
         // Sử dụng QuestionDto đã định nghĩa bên dưới
         public List<QuestionDto> Questions { get; set; } = new List<QuestionDto>();
+        public bool IsFree { get; set; } = true; // ← THÊM
     }
 
 }

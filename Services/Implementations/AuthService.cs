@@ -91,80 +91,61 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
             {
                 int? studentId = null;
                 int? parentId = null;
+                int packageType = 0; // ← THÊM
 
                 var user = await _userRepository.GetByEmailAsync(request.Email);
-
-                // Check user exist or not
                 if (user == null)
-                {
-                    return ApiResponse<LoginResponseDto>.ErrorResponse("Email hoặc mật khẩu không đúng", new List<string> { "Thông tin đăng nhập không hợp lệ" });
-                }
+                    return ApiResponse<LoginResponseDto>.ErrorResponse("Email hoặc mật khẩu không đúng");
 
-                // Kiểm tra xác nhận Email
                 if (!user.IsEmailConfirmed)
-                {
-                    return ApiResponse<LoginResponseDto>.ErrorResponse(
-                        "Vui lòng xác nhận email trước khi đăng nhập"
-                    );
-                }
+                    return ApiResponse<LoginResponseDto>.ErrorResponse("Vui lòng xác nhận email trước khi đăng nhập");
 
-                // Check account active or not
                 if (!user.IsActive)
-                {
-                    return ApiResponse<LoginResponseDto>.ErrorResponse(
-                        "Tài khoản đã bị vô hiệu hóa",
-                        new List<string> { "Vui lòng liên hệ quản trị viên" }
-                    );
-                }
+                    return ApiResponse<LoginResponseDto>.ErrorResponse("Tài khoản đã bị vô hiệu hóa");
 
-                // Verify password
                 if (!_passwordHasher.VerifyPassword(request.Password, user.PasswordHash))
-                {
-                    return ApiResponse<LoginResponseDto>.ErrorResponse(
-                        "Email hoặc mật khẩu không đúng",
-                        new List<string> { "Thông tin đăng nhập không hợp lệ" }
-                    );
-                }
+                    return ApiResponse<LoginResponseDto>.ErrorResponse("Email hoặc mật khẩu không đúng");
 
-                // Xử lý thông tin theo loại người dùng
                 if (user.UserType == UserType.Student)
                 {
                     var student = await _studentRepository.GetByUserIdAsync(user.UserId);
                     if (student == null)
-                    {
-                        return ApiResponse<LoginResponseDto>.ErrorResponse(
-                            "Không tìm thấy thông tin học sinh",
-                            new List<string> { "Dữ liệu hệ thống không đồng bộ" }
-                        );
-                    }
+                        return ApiResponse<LoginResponseDto>.ErrorResponse("Không tìm thấy thông tin học sinh");
 
                     studentId = student.StudentId;
+
+                    // ← THÊM ĐOẠN NÀY: Lấy PackageType từ Subscription active
+                    var activeSub = await _context.Subscriptions
+                        .Include(s => s.Package)
+                        .Where(s => s.StudentId == student.StudentId
+                                 && s.Status == SubscriptionStatus.Active
+                                 && s.EndDate > DateTime.UtcNow)
+                        .OrderByDescending(s => s.EndDate)
+                        .FirstOrDefaultAsync();
+
+                    if (activeSub?.Package != null)
+                    {
+                        var name = activeSub.Package.PackageName.ToLower();
+                        packageType = name.Contains("premium") ? 2
+                                    : name.Contains("standard") ? 1
+                                    : 0;
+                    }
                 }
                 else if (user.UserType == UserType.Parent)
                 {
                     var parent = await _parentRepository.GetByUserIdAsync(user.UserId);
                     if (parent == null)
-                    {
-                        return ApiResponse<LoginResponseDto>.ErrorResponse(
-                            "Không tìm thấy thông tin phụ huynh",
-                            new List<string> { "Dữ liệu hệ thống không đồng bộ" }
-                        );
-                    }
+                        return ApiResponse<LoginResponseDto>.ErrorResponse("Không tìm thấy thông tin phụ huynh");
 
                     parentId = parent.ParentId;
                 }
 
-                // Generate JWT token
                 var token = _jwtService.GenerateToken(user, studentId, parentId);
-
-                // Lấy thời gian hết hạn từ cấu hình
                 var expirationStr = _configuration["JwtSettings:ExpirationMinutes"] ?? "30";
                 int expirationMinutes = int.Parse(expirationStr);
 
-                // Update last login
                 await _userRepository.UpdateLastLoginAsync(user.UserId);
 
-                // Tạo response
                 var response = new LoginResponseDto
                 {
                     UserId = user.UserId,
@@ -175,14 +156,15 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
                     UserType = user.UserType,
                     Token = token,
                     TokenExpiration = DateTime.UtcNow.AddMinutes(expirationMinutes),
-                    AvatarUrl = user.AvatarUrl
+                    AvatarUrl = user.AvatarUrl,
+                    PackageType = packageType // ← THÊM
                 };
 
                 return ApiResponse<LoginResponseDto>.SuccessResponse(response, "Đăng nhập thành công");
             }
             catch (Exception ex)
             {
-                return ApiResponse<LoginResponseDto>.ErrorResponse("Đã xảy ra lỗi trong quá trình đăng nhập", new List<string> { ex.Message });
+                return ApiResponse<LoginResponseDto>.ErrorResponse("Đã xảy ra lỗi", new List<string> { ex.Message });
             }
         }
 
