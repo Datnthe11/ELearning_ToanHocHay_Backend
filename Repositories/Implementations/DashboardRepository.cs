@@ -74,6 +74,9 @@ namespace ELearning_ToanHocHay_Control.Repositories.Implementations
         /// <summary>
         /// Lấy thống kê tổng thể từ trước đến nay
         /// </summary>
+        // FILE: DashboardRepository.cs
+        // Thay thế method GetOverallStatsAsync bằng đoạn này:
+
         public async Task<OverallStatsModel> GetOverallStatsAsync(int studentId)
         {
             var attempts = await _context.ExerciseAttempts
@@ -89,9 +92,12 @@ namespace ELearning_ToanHocHay_Control.Repositories.Implementations
             if (attempts.Any())
             {
                 totalExercises = attempts.Count;
-                averageScore = attempts.Average(a =>
-                    ((double)a.TotalScore / (double)a.MaxScore) * 10.0);
-                averageScore = Math.Round(averageScore, 1);
+
+                // FIX: tính % từng bài rồi lấy trung bình — tránh bị lệch do MaxScore khác nhau
+                var percentages = attempts
+                    .Select(a => (double)a.TotalScore / (double)a.MaxScore * 10.0);
+
+                averageScore = Math.Round(percentages.Average(), 1);
             }
 
             var completedLessons = await _context.StudentProgresses
