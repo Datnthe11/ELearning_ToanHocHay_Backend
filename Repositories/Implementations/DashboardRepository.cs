@@ -90,7 +90,7 @@ namespace ELearning_ToanHocHay_Control.Repositories.Implementations
             {
                 totalExercises = attempts.Count;
                 averageScore = attempts.Average(a =>
-                    ((double)a.TotalScore / (double)a.MaxScore) * 100.0);
+                    ((double)a.TotalScore / (double)a.MaxScore) * 10.0);
                 averageScore = Math.Round(averageScore, 1);
             }
 
