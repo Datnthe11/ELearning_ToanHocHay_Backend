@@ -12,19 +12,14 @@ namespace ELearning_ToanHocHay_Control.Repositories.Implementations
         private readonly AppDbContext _context;
         private readonly ILogger<DashboardRepository> _logger;
 
-        // Cấu hình múi giờ Việt Nam để tính toán chuỗi ngày học (Streak) chính xác
-
         private static readonly TimeZoneInfo VnTimeZone = GetVnTimeZone();
 
         private static TimeZoneInfo GetVnTimeZone()
         {
-            // Thử Linux IANA ID trước
             try { return TimeZoneInfo.FindSystemTimeZoneById("Asia/Ho_Chi_Minh"); }
             catch { }
-            // Fallback Windows ID
             try { return TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time"); }
             catch { }
-            // Fallback thủ công UTC+7
             return TimeZoneInfo.CreateCustomTimeZone("VN", TimeSpan.FromHours(7), "Vietnam", "Vietnam");
         }
 
@@ -39,6 +34,7 @@ namespace ELearning_ToanHocHay_Control.Repositories.Implementations
 
         /// <summary>
         /// Lấy thống kê theo tuần (Thời gian học, số bài tập, điểm TB)
+        /// FIX: Đổi *100m thành *10m để thống nhất thang điểm 10
         /// </summary>
         public async Task<WeeklyStatsModel> GetWeeklyStatsAsync(
             int studentId, DateTime startDate, DateTime endDate)
@@ -52,38 +48,38 @@ namespace ELearning_ToanHocHay_Control.Repositories.Implementations
                            a.SubmittedAt.Value < endDate);
 
             var totalMinutes = await query
-                .SumAsync(a => (int)(a.SubmittedAt.Value - a.StartTime).TotalMinutes);
+                .SumAsync(a => (int)(a.SubmittedAt!.Value - a.StartTime).TotalMinutes);
 
             var exerciseCount = await query.CountAsync();
 
             var totalScore = await query.SumAsync(a => a.TotalScore);
             var totalMax = await query.SumAsync(a => a.MaxScore);
 
+            // ✅ FIX: *10m thay vì *100m → thang điểm 10
             var averageScore = totalMax > 0
-                ? (decimal)totalScore / (decimal)totalMax * 100m
+                ? Math.Round((decimal)totalScore / (decimal)totalMax * 10m, 1)
                 : 0m;
 
             return new WeeklyStatsModel
             {
                 TotalMinutes = totalMinutes,
                 ExerciseCount = exerciseCount,
-                AverageScore = Math.Round(averageScore, 1)
+                AverageScore = averageScore
             };
         }
 
         /// <summary>
         /// Lấy thống kê tổng thể từ trước đến nay
+        /// FIX: Thêm null check cho Exercise
         /// </summary>
-        // FILE: DashboardRepository.cs
-        // Thay thế method GetOverallStatsAsync bằng đoạn này:
-
         public async Task<OverallStatsModel> GetOverallStatsAsync(int studentId)
         {
             var attempts = await _context.ExerciseAttempts
                 .AsNoTracking()
                 .Where(a => a.StudentId == studentId &&
                            a.Status != AttemptStatus.InProgress &&
-                           a.MaxScore > 0)
+                           a.MaxScore > 0 &&
+                           a.Exercise != null) // ✅ FIX: null check
                 .ToListAsync();
 
             double averageScore = 0;
@@ -92,12 +88,9 @@ namespace ELearning_ToanHocHay_Control.Repositories.Implementations
             if (attempts.Any())
             {
                 totalExercises = attempts.Count;
-
-                // FIX: tính % từng bài rồi lấy trung bình — tránh bị lệch do MaxScore khác nhau
-                var percentages = attempts
-                    .Select(a => (double)a.TotalScore / (double)a.MaxScore * 10.0);
-
-                averageScore = Math.Round(percentages.Average(), 1);
+                // Thang 10, làm tròn 1 chữ số
+                averageScore = Math.Round(
+                    attempts.Average(a => (double)a.TotalScore / (double)a.MaxScore * 10.0), 1);
             }
 
             var completedLessons = await _context.StudentProgresses
@@ -154,15 +147,13 @@ namespace ELearning_ToanHocHay_Control.Repositories.Implementations
         /// <summary>
         /// Lấy danh sách các bài học vừa hoàn thành gần đây
         /// </summary>
-        // Chỉ thay thế method GetRecentLessonsAsync trong DashboardRepository.cs
-
         public async Task<List<RecentLessonModel>> GetRecentLessonsAsync(int studentId, int limit)
         {
             var raw = await _context.ExerciseAttempts
                 .AsNoTracking()
                 .Where(a => a.StudentId == studentId &&
                            a.Status != AttemptStatus.InProgress &&
-                           a.Exercise != null)          // guard: bỏ attempt mồ côi
+                           a.Exercise != null)
                 .Include(a => a.Exercise)
                     .ThenInclude(e => e.Topic)
                         .ThenInclude(t => t.Chapter)
@@ -174,13 +165,14 @@ namespace ELearning_ToanHocHay_Control.Repositories.Implementations
                 .ToListAsync();
 
             return raw
-                .Where(a => a.Exercise?.Topic != null)  // lọc thêm sau khi load
+                .Where(a => a.Exercise?.Topic != null)
                 .Select(a => new RecentLessonModel
                 {
                     LessonId = a.Exercise.Topic.Lessons?.FirstOrDefault()?.LessonId ?? 0,
-                    LessonName = a.Exercise.Topic.Lessons?.FirstOrDefault()?.LessonName ?? a.Exercise.Topic.TopicName,
+                    LessonName = a.Exercise.Topic.Lessons?.FirstOrDefault()?.LessonName
+                                      ?? a.Exercise.Topic.TopicName,
                     TopicName = a.Exercise.Topic.TopicName ?? "N/A",
-                    ChapterName = a.Exercise.Topic.Chapter?.ChapterName ?? "N/A",  // null-safe
+                    ChapterName = a.Exercise.Topic.Chapter?.ChapterName ?? "N/A",
                     CompletedAt = a.SubmittedAt,
                     DurationMinutes = a.SubmittedAt.HasValue
                         ? (int)(a.SubmittedAt.Value - a.StartTime).TotalMinutes
@@ -188,26 +180,22 @@ namespace ELearning_ToanHocHay_Control.Repositories.Implementations
                     IsCompleted = true,
                     ProgressPercentage = 100,
                     Score = a.MaxScore > 0
-                        ? Math.Round((double)a.TotalScore / (double)a.MaxScore * 100.0, 1)
-                        : (double?)null
+                        ? Math.Round((double)a.TotalScore / (double)a.MaxScore * 10.0, 1)
+                        : (double?)null  // ✅ FIX: thang 10 thay vì *100
                 }).ToList();
         }
 
         /// <summary>
         /// Lấy danh sách chương và tiến độ học tập.
-        /// CHÚ Ý: Đã fix cứng CurriculumId = 3 cho chương trình Kết Nối Tri Thức.
         /// </summary>
         public async Task<List<ChapterProgressModel>> GetChapterProgressAsync(int studentId)
         {
-            // TODO: Tạm thời fix cứng giá trị ID = 3 (Bộ Kết Nối Tri Thức).
-            // Sau này sẽ lấy động từ bảng Student thông qua tham số studentId.
             int targetCurriculumId = 3;
 
             var chapters = await _context.Chapters
                 .AsNoTracking()
                 .Include(c => c.Topics)
                     .ThenInclude(t => t.studentProgresses)
-                // Lọc theo các chương đang hoạt động VÀ thuộc bộ sách ID 3
                 .Where(c => c.IsActive && c.CurriculumId == targetCurriculumId)
                 .OrderBy(c => c.OrderIndex)
                 .ToListAsync();
@@ -257,6 +245,46 @@ namespace ELearning_ToanHocHay_Control.Repositories.Implementations
             return progressList;
         }
 
+        /// <summary>
+        /// Lấy điểm TB theo từng chương để vẽ biểu đồ
+        /// FIX: Load về client trước rồi GroupBy để tránh crash navigation property null
+        /// FIX: Thang điểm 10 thay vì không nhất quán
+        /// </summary>
+        public async Task<List<ChapterScoreComparisonDto>> GetChapterComparisonAsync(int studentId)
+        {
+            // ✅ FIX: Load về client trước, tránh crash khi GroupBy trên navigation property
+            var attempts = await _context.ExerciseAttempts
+                .AsNoTracking()
+                .Where(a => a.StudentId == studentId &&
+                            a.Status != AttemptStatus.InProgress &&
+                            a.MaxScore > 0 &&
+                            a.Exercise != null &&           // ✅ null check
+                            a.Exercise.Chapter != null)     // ✅ null check
+                .Include(a => a.Exercise)
+                    .ThenInclude(e => e.Chapter)
+                .ToListAsync();
+
+            return attempts
+                .GroupBy(a => new
+                {
+                    a.Exercise.Chapter.ChapterId,
+                    a.Exercise.Chapter.ChapterName
+                })
+                .Select(g => new ChapterScoreComparisonDto
+                {
+                    ChapterId = g.Key.ChapterId,
+                    ChapterName = g.Key.ChapterName,
+                    // ✅ FIX: Thang 10, làm tròn 1 chữ số
+                    AverageScore = Math.Round(
+                        g.Sum(x => (decimal)x.TotalScore) * 10m /
+                        g.Sum(x => (decimal)x.MaxScore), 1)
+                })
+                .OrderBy(x => x.ChapterId)
+                .ToList();
+        }
+
+        // ==================== PRIVATE HELPERS ====================
+
         private int CalculateCurrentStreak(List<DateTime> studyDates, DateTime today)
         {
             if (!studyDates.Any()) return 0;
@@ -303,28 +331,6 @@ namespace ELearning_ToanHocHay_Control.Repositories.Implementations
             }
 
             return longestStreak;
-        }
-
-        public async Task<List<ChapterScoreComparisonDto>> GetChapterComparisonAsync(int studentId)
-        {
-            return await _context.ExerciseAttempts
-                .Where(a => a.StudentId == studentId &&
-                            a.Status != AttemptStatus.InProgress &&
-                            a.MaxScore > 0)
-                .GroupBy(a => new
-                {
-                    a.Exercise.Chapter.ChapterId,
-                    a.Exercise.Chapter.ChapterName
-                })
-                .Select(g => new ChapterScoreComparisonDto
-                {
-                    ChapterId = g.Key.ChapterId,
-                    ChapterName = g.Key.ChapterName,
-                    AverageScore =
-                        (decimal)g.Sum(x => x.TotalScore) * 10m /
-                        (decimal)g.Sum(x => x.MaxScore)
-                })
-                .ToListAsync();
         }
     }
 }
