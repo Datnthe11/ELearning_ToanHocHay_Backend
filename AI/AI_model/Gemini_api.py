@@ -277,6 +277,64 @@ class GeminiAIService:
                 "status": "error",
                 "error": str(e)
             }
+    
+    # ==================== INSIGHT GENERATION ====================
+    def generate_insight(
+        self,
+        question_text: str,
+        student_answer: str,
+        correct_answer: str
+    ) -> Dict[str, Any]:
+        """
+        Generate educational insights based on student answers to identify weaknesses.
+        """
+        try:
+            from Prompts import general_improvement_prompt
+            
+            # Format the prompt
+            formatted_prompt = general_improvement_prompt.format(
+                question_text=question_text,
+                student_answer=student_answer,
+                correct_answer=correct_answer
+            )
+            
+            # Add JSON format instruction
+            formatted_prompt += """\n\nCung cấp phản hồi dưới dạng JSON với cấu trúc:
+{
+    "concepts_to_review": ["Khái niệm 1", "Khái niệm 2"],
+    "recommended_exercises": ["Bài tập 1", "Bài tập 2"],
+    "quick_tips": ["Mẹo 1", "Mẹo 2"],
+    "summary": "Tóm tắt ngắn gọn nhận xét cho em..."
+}"""
+            
+            # Call Gemini API with retry logic
+            response = self._call_api_with_retry([formatted_prompt])
+            
+            if response.get("Status") == "error":
+                return {
+                    "status": "error",
+                    "error": response.get("Error", "Unknown error")
+                }
+            
+            # Parse JSON response
+            response_text = response.get("text", "")
+            cleaned_text = self._clean_json_text(response_text)
+            insight_data = json.loads(cleaned_text)
+            
+            return {
+                "concepts_to_review": insight_data.get("concepts_to_review", []),
+                "recommended_exercises": insight_data.get("recommended_exercises", []),
+                "quick_tips": insight_data.get("quick_tips", []),
+                "summary": insight_data.get("summary", ""),
+                "status": "success"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error generating insight: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
 
     
     def _clean_json_text(self, text: str) -> str:

@@ -1,7 +1,9 @@
-﻿using AutoMapper;
+using AutoMapper;
 using ELearning_ToanHocHay_Control.Models.DTOs.Chapter;
 using ELearning_ToanHocHay_Control.Models.DTOs.Student;
 using ELearning_ToanHocHay_Control.Models.DTOs.Student.Dashboard;
+using ELearning_ToanHocHay_Control.Models.DTOs.AI;
+using ELearning_ToanHocHay_Control.Data.Entities;
 using ELearning_ToanHocHay_Control.Repositories.Interfaces;
 using ELearning_ToanHocHay_Control.Services.Interfaces;
 using SendGrid.Helpers.Errors.Model;
@@ -10,10 +12,11 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
 {
     public class CoreDashboardService : ICoreDashboardService
     {
-
         private readonly IDashboardRepository _dashboardRepo;
         private readonly IStudentRepository _studentRepo;
         private readonly IPackageRepository _packageRepo;
+        private readonly IAIService _aiService;
+        private readonly IExerciseAttemptRepository _attemptRepo;
         private readonly IMapper _mapper;
         private readonly ILogger<CoreDashboardService> _logger;
 
@@ -21,47 +24,38 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
             IDashboardRepository dashboardRepo,
             IStudentRepository studentRepo,
             IPackageRepository packageRepo,
+            IAIService aiService,
+            IExerciseAttemptRepository attemptRepo,
             IMapper mapper,
             ILogger<CoreDashboardService> logger)
         {
             _dashboardRepo = dashboardRepo;
             _studentRepo = studentRepo;
             _packageRepo = packageRepo;
+            _aiService = aiService;
+            _attemptRepo = attemptRepo;
             _mapper = mapper;
             _logger = logger;
         }
 
         public async Task<CoreDashboardDto> GetCoreDashboardAsync(int studentId)
         {
-            // Check cache first
-            var cacheKey = $"dashboard:core:{studentId}";
-
             _logger.LogInformation("Building core dashboard for student {StudentId}", studentId);
 
-            // Execute queries in parallel for performance
             var studentInfoTask = await GetStudentInfoAsync(studentId);
             var statsTask = await GetOverviewStatsAsync(studentId);
             var recentLessonsTask = await GetRecentLessonsAsync(studentId, 5);
             var chapterProgressTask = await GetChapterProgressSummaryAsync(studentId);
             var packageTypeTask = await GetPackageTypeAsync(studentId);
 
-            /*await Task.WhenAll(
-                studentInfoTask,
-                statsTask,
-                recentLessonsTask,
-                chapterProgressTask,
-                packageTypeTask);*/
-
-            var packageType = packageTypeTask;
-
             var dashboard = new CoreDashboardDto
             {
-                StudentInfo =  studentInfoTask,
-                Stats =  statsTask,
+                StudentInfo = studentInfoTask,
+                Stats = statsTask,
                 RecentLessons = recentLessonsTask,
                 ChapterProgress = chapterProgressTask,
-                PackageType = packageType,
-                Links = GenerateDashboardLinks(studentId, packageType)
+                PackageType = packageTypeTask,
+                Links = GenerateDashboardLinks(studentId, packageTypeTask)
             };
 
             return dashboard;
@@ -70,7 +64,6 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
         private async Task<StudentInfoDto> GetStudentInfoAsync(int studentId)
         {
             var student = await _studentRepo.GetStudentWithUserAsync(studentId);
-
             if (student == null)
                 throw new NotFoundException($"Student {studentId} not found");
 
@@ -85,33 +78,20 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
 
         private async Task<OverviewStatsDto> GetOverviewStatsAsync(int studentId)
         {
-            // Lấy stats tuần này
             var weekStart = GetWeekStart(DateTime.UtcNow);
             var weekEnd = weekStart.AddDays(7);
 
-            var thisWeekStats = await _dashboardRepo.GetWeeklyStatsAsync(
-                studentId, weekStart, weekEnd);
-
-            // Lấy stats tuần trước để so sánh
-            var lastWeekStart = weekStart.AddDays(-7);
-            var lastWeekStats = await _dashboardRepo.GetWeeklyStatsAsync(
-                studentId, lastWeekStart, weekStart);
-
-            // Lấy thống kê tổng thể
+            var thisWeekStats = await _dashboardRepo.GetWeeklyStatsAsync(studentId, weekStart, weekEnd);
+            var lastWeekStats = await _dashboardRepo.GetWeeklyStatsAsync(studentId, weekStart.AddDays(-7), weekStart);
             var overallStats = await _dashboardRepo.GetOverallStatsAsync(studentId);
-
-            // Tính streak
             var streakData = await _dashboardRepo.GetStreakDataAsync(studentId);
 
-            // So sánh tuần này vs tuần trước
             var comparison = new ComparisonDto
             {
                 ScoreChange = (int)(thisWeekStats.AverageScore - lastWeekStats.AverageScore),
                 StudyTimeChange = thisWeekStats.TotalMinutes - lastWeekStats.TotalMinutes,
                 ExerciseCountChange = thisWeekStats.ExerciseCount - lastWeekStats.ExerciseCount,
-                Direction = DetermineDirection(
-                    thisWeekStats.AverageScore,
-                    lastWeekStats.AverageScore)
+                Direction = DetermineDirection(thisWeekStats.AverageScore, lastWeekStats.AverageScore)
             };
 
             return new OverviewStatsDto
@@ -131,7 +111,6 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
         private async Task<List<RecentLessonDto>> GetRecentLessonsAsync(int studentId, int limit)
         {
             var recentLessons = await _dashboardRepo.GetRecentLessonsAsync(studentId, limit);
-
             return recentLessons.Select(l => new RecentLessonDto
             {
                 LessonId = l.LessonId,
@@ -149,7 +128,6 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
         private async Task<List<ChapterProgressSummaryDto>> GetChapterProgressSummaryAsync(int studentId)
         {
             var chapterProgress = await _dashboardRepo.GetChapterProgressAsync(studentId);
-
             return chapterProgress.Select(cp => new ChapterProgressSummaryDto
             {
                 ChapterId = cp.ChapterId,
@@ -168,12 +146,9 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
         public async Task<PackageType> GetPackageTypeAsync(int studentId)
         {
             var subscription = await _packageRepo.GetActivePackageAsync(studentId);
-
-            if (subscription?.Package == null)
-                return PackageType.Free;
+            if (subscription?.Package == null) return PackageType.Free;
 
             var name = subscription.Package.PackageName.ToLower();
-
             return name switch
             {
                 var n when n.Contains("premium") => PackageType.Premium,
@@ -185,19 +160,12 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
         private DashboardLinksDto GenerateDashboardLinks(int studentId, PackageType packageType)
         {
             var baseUrl = $"/api/student/{studentId}/dashboard";
-
             return new DashboardLinksDto
             {
                 ExerciseHistory = $"{baseUrl}/exercise-history",
-                Charts = packageType >= PackageType.Standard
-                    ? $"{baseUrl}/charts"
-                    : null,
-                AIInsights = packageType >= PackageType.Premium
-                    ? $"{baseUrl}/ai-insights"
-                    : null,
-                Notifications = packageType >= PackageType.Standard
-                    ? $"{baseUrl}/notifications"
-                    : null
+                Charts = packageType >= PackageType.Standard ? $"{baseUrl}/charts" : null,
+                AIInsights = packageType >= PackageType.Premium ? $"{baseUrl}/ai-insights" : null,
+                Notifications = packageType >= PackageType.Standard ? $"{baseUrl}/notifications" : null
             };
         }
 
@@ -207,9 +175,52 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
             return student?.UserId == userId;
         }
 
+        public async Task<List<ChapterScoreComparisonDto>> GetChapterScoreComparisonAsync(int studentId)
+        {
+            return await _dashboardRepo.GetChapterComparisonAsync(studentId);
+        }
+
+        public async Task<AIInsightResponse?> GetAIInsightAsync(int studentId)
+        {
+            _logger.LogInformation("Generating AI insight for dashboard student {StudentId}", studentId);
+            
+            // Lấy những bài làm gần nhất của học sinh có câu trả lời sai
+            var attempts = await _attemptRepo.GetStudentAttemptsAsync(studentId);
+            var lastAttemptWithMistakes = attempts
+                .Where(a => a.Status != AttemptStatus.InProgress && a.WrongAnswers > 0)
+                .OrderByDescending(a => a.SubmittedAt)
+                .FirstOrDefault();
+
+            if (lastAttemptWithMistakes == null)
+            {
+                return new AIInsightResponse { 
+                    Summary = "Bạn đang làm bài rất tốt và không có lỗi sai nào gần đây. Hãy tiếp tục thử thách mình với các bài tập khó hơn nhé!",
+                    ConceptsToReview = new List<string> { "Duy trì phong độ", "Mở rộng bài tập" },
+                    Status = "success" 
+                };
+            }
+
+            // Lấy chi tiết bài làm để tìm câu sai
+            var details = await _attemptRepo.GetAttemptWithDetailsAsync(lastAttemptWithMistakes.AttemptId);
+            var wrongAnswer = details.StudentAnswers?.FirstOrDefault(sa => !sa.IsCorrect && sa.Question != null);
+
+            if (wrongAnswer == null || wrongAnswer.Question == null)
+            {
+                return new AIInsightResponse { Summary = "Chúng tôi chưa tìm thấy lỗ hổng kiến thức qua các bài làm gần đây.", Status = "success" };
+            }
+
+            var aiRequest = new AIInsightRequest
+            {
+                QuestionText = wrongAnswer.Question.QuestionText ?? "",
+                StudentAnswer = wrongAnswer.AnswerText ?? "",
+                CorrectAnswer = wrongAnswer.Question.CorrectAnswer ?? ""
+            };
+
+            return await _aiService.GenerateInsightStructuredAsync(aiRequest);
+        }
+
         private DateTime GetWeekStart(DateTime date)
         {
-            // Start from Monday
             var diff = (7 + (date.DayOfWeek - DayOfWeek.Monday)) % 7;
             return date.AddDays(-diff).Date;
         }
@@ -219,11 +230,6 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
             var diff = current - previous;
             if (Math.Abs(diff) < 1) return TrendDirection.Same;
             return diff > 0 ? TrendDirection.Up : TrendDirection.Down;
-        }
-
-        public async Task<List<ChapterScoreComparisonDto>> GetChapterScoreComparisonAsync(int studentId)
-        {
-            return await _dashboardRepo.GetChapterComparisonAsync(studentId);
         }
     }
 }

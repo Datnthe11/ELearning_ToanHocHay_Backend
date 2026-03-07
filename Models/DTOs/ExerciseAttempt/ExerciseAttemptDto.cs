@@ -1,4 +1,4 @@
-﻿using ELearning_ToanHocHay_Control.Data.Entities;
+using ELearning_ToanHocHay_Control.Data.Entities;
 
 namespace ELearning_ToanHocHay_Control.Models.DTOs.ExerciseAttempt
 {
@@ -116,5 +116,10 @@ namespace ELearning_ToanHocHay_Control.Models.DTOs.ExerciseAttempt
         public double PointsEarned { get; set; }
         public double MaxScores { get; set; }
         public string? Explanation { get; set; }
+
+        // AI Feedback fields
+        public string? FullSolution { get; set; }
+        public string? MistakeAnalysis { get; set; }
+        public string? ImprovementAdvice { get; set; }
     }
 }

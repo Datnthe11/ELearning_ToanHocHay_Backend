@@ -231,6 +231,25 @@ def generate_feedback():
         logger.exception("Error in generating feedback")
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/ai-insights', methods=['POST'])
+def generate_ai_insight():
+    try:
+        data = request.get_json(force=True)
+        required = ['question_text', 'student_answer', 'correct_answer']
+        is_valid, error = validate_fields(data, required)
+        if not is_valid: return jsonify({"error": error}), 400
+
+        logger.info(f"[AI] Generating insight for: {data.get('question_text')[:50]}...")
+        result = gemini_ai.generate_insight(
+            question_text=data.get('question_text'),
+            student_answer=data.get('student_answer'),
+            correct_answer=data.get('correct_answer')
+        )
+        return jsonify(result), 200
+    except Exception as e:
+        logger.exception("Error in generating AI insight")
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/feedback/batch', methods=['POST'])
 def generate_feedback_batch():
     print(">>> [AI] BATCH FEEDBACK REQUEST RECEIVED!")
@@ -325,6 +344,10 @@ def documentation():
         <div class="card">
             <p><span class="method">POST</span> /api/feedback/batch</p>
             <pre>{"feedbacks": [{"question_text": "2+2=?", ...}]}</pre>
+        </div>
+        <div class="card">
+            <p><span class="method">POST</span> /api/ai-insights</p>
+            <pre>{"question_text": "2+2=?", "student_answer": "5", "correct_answer": "4"}</pre>
         </div>
 
         <h2>🛠 System</h2>

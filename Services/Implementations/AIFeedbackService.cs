@@ -1,8 +1,9 @@
-﻿using ELearning_ToanHocHay_Control.Data.Entities;
+using ELearning_ToanHocHay_Control.Data.Entities;
 using ELearning_ToanHocHay_Control.Models.DTOs;
 using ELearning_ToanHocHay_Control.Models.DTOs.AIFeedback;
 using ELearning_ToanHocHay_Control.Repositories.Interfaces;
 using ELearning_ToanHocHay_Control.Services.Interfaces;
+using ELearning_ToanHocHay_Control.Models.DTOs.AI;
 
 namespace ELearning_ToanHocHay_Control.Services.Implementations
 {
@@ -11,21 +12,27 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
         private readonly IAIFeedbackRepository _feedbackRepository;
         private readonly IExerciseAttemptRepository _attemptRepository;
         private readonly IQuestionRepository _questionRepository;
+        private readonly IAIService _aiService;
+        private readonly ILogger<AIFeedbackService> _logger;
 
         public AIFeedbackService(
             IAIFeedbackRepository feedbackRepository,
             IExerciseAttemptRepository attemptRepository,
-            IQuestionRepository questionRepository)
+            IQuestionRepository questionRepository,
+            IAIService aiService,
+            ILogger<AIFeedbackService> logger)
         {
             _feedbackRepository = feedbackRepository;
             _attemptRepository = attemptRepository;
             _questionRepository = questionRepository;
+            _aiService = aiService;
+            _logger = logger;
         }
 
         public async Task<ApiResponse<AIFeedbackDto>> CreateAsync(CreateAIFeedbackDto dto)
         {
             // Check Attempt
-            var attempt = await _attemptRepository.GetAttemptByIdAsync(dto.AttemptId);
+            var attempt = await _attemptRepository.GetAttemptWithDetailsAsync(dto.AttemptId);
             if (attempt == null)
                 return ApiResponse<AIFeedbackDto>.ErrorResponse("Attempt not found");
 
@@ -34,13 +41,59 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
             if (question == null)
                 return ApiResponse<AIFeedbackDto>.ErrorResponse("Question not found");
 
+            string fullSolution = dto.FullSolution ?? string.Empty;
+            string mistakeAnalysis = dto.MistakeAnalysis ?? string.Empty;
+            string improvementAdvice = dto.ImprovementAdvice ?? string.Empty;
+
+            // Nếu dữ liệu trống, gọi AI sinh mới
+            if (string.IsNullOrWhiteSpace(fullSolution))
+            {
+                _logger.LogInformation($"Generating AI feedback for Question {dto.QuestionId}, Attempt {dto.AttemptId}");
+
+                // Lấy câu trả lời của học sinh cho câu hỏi này trong lượt làm bài
+                var studentAnswer = attempt.StudentAnswers?.FirstOrDefault(a => a.QuestionId == dto.QuestionId);
+                
+                var aiRequest = new AIFeedbackRequest
+                {
+                    QuestionText = question.QuestionText ?? string.Empty,
+                    QuestionType = question.QuestionType.ToString(),
+                    StudentAnswer = studentAnswer?.AnswerText ?? "Không có câu trả lời",
+                    CorrectAnswer = question.CorrectAnswer ?? string.Empty,
+                    IsCorrect = studentAnswer?.IsCorrect ?? false,
+                    Explanation = question.Explanation,
+                    AttemptId = dto.AttemptId,
+                    QuestionId = dto.QuestionId,
+                    QuestionImageUrl = question.QuestionImageUrl,
+                    Options = question.QuestionOptions?.Select(o => new AIOptionDto
+                    {
+                        OptionId = o.OptionId,
+                        OptionText = o.OptionText ?? string.Empty,
+                        ImageUrl = o.ImageUrl,
+                        IsCorrect = o.IsCorrect
+                    }).ToList()
+                };
+
+                var aiResponse = await _aiService.GenerateFeedbackStructuredAsync(aiRequest);
+
+                if (aiResponse != null && aiResponse.Status == "success")
+                {
+                    fullSolution = aiResponse.FullSolution;
+                    mistakeAnalysis = aiResponse.MistakeAnalysis;
+                    improvementAdvice = aiResponse.ImprovementAdvice;
+                }
+                else
+                {
+                    _logger.LogError("AI Service failed to generate feedback");
+                }
+            }
+
             var feedback = new AIFeedback
             {
                 AttemptId = dto.AttemptId,
                 QuestionId = dto.QuestionId,
-                FullSolution = dto.FullSolution,
-                MistakeAnalysis = dto.MistakeAnalysis,
-                ImprovementAdvice = dto.ImprovementAdvice
+                FullSolution = fullSolution,
+                MistakeAnalysis = mistakeAnalysis,
+                ImprovementAdvice = improvementAdvice
             };
 
             var created = await _feedbackRepository.CreateAsync(feedback);

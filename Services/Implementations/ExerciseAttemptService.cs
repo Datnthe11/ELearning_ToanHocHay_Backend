@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+using AutoMapper;
 using ELearning_ToanHocHay_Control.Data;
 using ELearning_ToanHocHay_Control.Data.Entities;
 using ELearning_ToanHocHay_Control.Models.DTOs;
@@ -24,6 +24,7 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
         private readonly IQuestionBankRepository _questionBankRepository;
         private readonly IMapper _mapper;
         private readonly IExerciseQuestionRepository _exerciseQuestionRepository;
+        private readonly IAIFeedbackRepository _feedbackRepository;
         private readonly AppDbContext _context;
 
         public ExerciseAttemptService(
@@ -33,6 +34,7 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
             IUserRepository userRepository,
             IQuestionBankRepository questionBankRepository,
             IExerciseQuestionRepository exerciseQuestionRepository,
+            IAIFeedbackRepository feedbackRepository,
             IMapper mapper,
             AppDbContext context) // FIX: Thêm context vào đây
         {
@@ -42,6 +44,7 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
             _userRepository = userRepository;
             _questionBankRepository = questionBankRepository;
             _exerciseQuestionRepository = exerciseQuestionRepository;
+            _feedbackRepository = feedbackRepository;
             _mapper = mapper;
             _context = context; // FIX: Gán giá trị để không bị Null
         }
@@ -264,6 +267,10 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
 
                 var answerLookup = studentAnswers.ToDictionary(a => a.QuestionId);
 
+                // Lấy Feedback của AI nếu có
+                var aiFeedbacks = await _feedbackRepository.GetByAttemptAsync(attemptId);
+                var feedbackLookup = aiFeedbacks.ToDictionary(f => f.QuestionId);
+
                 var answerDetails = new List<AnswerDetailDto>();
 
                 // 4. DUYỆT THEO DANH SÁCH CÂU HỎI GỐC CỦA ĐỀ THI
@@ -290,7 +297,12 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
                         IsCorrect = isCorrect,
                         PointsEarned = isAnswered ? answer!.PointsEarned : 0,
                         MaxScores = eq.Score,
-                        Explanation = question.Explanation
+                        Explanation = question.Explanation,
+                        
+                        // Gán Feedback từ AI
+                        FullSolution = feedbackLookup.TryGetValue(question.QuestionId, out var fb) ? fb.FullSolution : null,
+                        MistakeAnalysis = fb?.MistakeAnalysis,
+                        ImprovementAdvice = fb?.ImprovementAdvice
                     });
                 }
 

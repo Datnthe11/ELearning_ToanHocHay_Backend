@@ -1,8 +1,9 @@
-﻿using ELearning_ToanHocHay_Control.Data.Entities;
+using ELearning_ToanHocHay_Control.Data.Entities;
 using ELearning_ToanHocHay_Control.Models.DTOs;
 using ELearning_ToanHocHay_Control.Models.DTOs.AIHint;
 using ELearning_ToanHocHay_Control.Repositories.Interfaces;
 using ELearning_ToanHocHay_Control.Services.Interfaces;
+using ELearning_ToanHocHay_Control.Models.DTOs.AI;
 using System.Linq;
 
 namespace ELearning_ToanHocHay_Control.Services.Implementations
@@ -48,7 +49,7 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
             {
                 _logger.LogInformation($"Generating AI hint for Question {dto.QuestionId}, Attempt {dto.AttemptId}");
                 
-                var aiRequest = new HintRequest
+                var aiRequest = new AIHintRequest
                 {
                     QuestionText = question.QuestionText ?? string.Empty,
                     QuestionType = question.QuestionType.ToString(), // ✅ Convert Enum to String

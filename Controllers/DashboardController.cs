@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using ELearning_ToanHocHay_Control.Models.DTOs.Student.Dashboard;
 using ELearning_ToanHocHay_Control.Services.Implementations;
 using ELearning_ToanHocHay_Control.Services.Interfaces;
@@ -69,6 +69,22 @@ namespace ELearning_ToanHocHay_Control.Controllers
                 return StatusCode(403, new { message = "Gói của bạn không hỗ trợ tính năng này." });
 
             var result = await _coreDashboardService.GetChapterScoreComparisonAsync(studentId);
+
+            return Ok(result);
+        }
+
+        [HttpGet("ai-insights")]
+        public async Task<IActionResult> GetAIInsights(int studentId)
+        {
+            var package = await _coreDashboardService.GetPackageTypeAsync(studentId);
+
+            if (package < PackageType.Premium)
+                return StatusCode(403, new { message = "Tính năng này chỉ dành cho tài khoản Premium." });
+
+            var result = await _coreDashboardService.GetAIInsightAsync(studentId);
+
+            if (result == null)
+                return NotFound(new { message = "Chưa có dữ liệu để phân tích." });
 
             return Ok(result);
         }

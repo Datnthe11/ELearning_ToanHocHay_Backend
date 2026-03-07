@@ -1,4 +1,4 @@
-﻿using ELearning_ToanHocHay_Control.Data;
+using ELearning_ToanHocHay_Control.Data;
 using ELearning_ToanHocHay_Control.Data.Entities;
 using ELearning_ToanHocHay_Control.Repositories.Interfaces;
 using Microsoft.EntityFrameworkCore;

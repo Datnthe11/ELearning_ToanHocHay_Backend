@@ -1,4 +1,5 @@
-﻿using ELearning_ToanHocHay_Control.Models.DTOs.Chatbot;
+using ELearning_ToanHocHay_Control.Models.DTOs.Chatbot;
+using ELearning_ToanHocHay_Control.Models.DTOs.AI;
 using ELearning_ToanHocHay_Control.Services.Implementations;
 
 namespace ELearning_ToanHocHay_Control.Services.Interfaces
@@ -9,8 +10,9 @@ namespace ELearning_ToanHocHay_Control.Services.Interfaces
         Task<string> GenerateFeedbackAsync(string prompt);
 
         // Structured AI Methods (for integration with AIHintService/AIFeedbackService)
-        Task<HintResponse?> GenerateHintStructuredAsync(HintRequest request);
-        Task<FeedbackResponse?> GenerateFeedbackStructuredAsync(FeedbackRequest request);
+        Task<AIHintResponse?> GenerateHintStructuredAsync(AIHintRequest request);
+        Task<AIFeedbackResponse?> GenerateFeedbackStructuredAsync(AIFeedbackRequest request);
+        Task<AIInsightResponse?> GenerateInsightStructuredAsync(AIInsightRequest request);
 
         // Chatbot Methods
         Task<ChatbotResponse?> SendChatbotMessageAsync(ChatbotMessageRequest request);

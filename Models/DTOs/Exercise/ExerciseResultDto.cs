@@ -1,4 +1,4 @@
-﻿namespace ELearning_ToanHocHay_Control.Models.DTOs.Exercise // Ở Backend thì đổi thành namespace ELearning_ToanHocHay_Control.Models.DTOs
+namespace ELearning_ToanHocHay_Control.Models.DTOs.Exercise // Ở Backend thì đổi thành namespace ELearning_ToanHocHay_Control.Models.DTOs
 {
     public class ExerciseResultDto
     {
@@ -28,5 +28,10 @@
         public double PointsEarned { get; set; }
         public double MaxScores { get; set; }
         public string? Explanation { get; set; }
+
+        // AI Feedback fields
+        public string? FullSolution { get; set; }
+        public string? MistakeAnalysis { get; set; }
+        public string? ImprovementAdvice { get; set; }
     }
 }

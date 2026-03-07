@@ -1,8 +1,9 @@
-﻿using System.Text;
+using System.Text;
 using System.Text.Json;
 using ELearning_ToanHocHay_Control.Services.Interfaces;
 using System.Text.Json.Serialization;
 using ELearning_ToanHocHay_Control.Models.DTOs.Chatbot;
+using ELearning_ToanHocHay_Control.Models.DTOs.AI;
 
 namespace ELearning_ToanHocHay_Control.Services.Implementations
 {
@@ -37,17 +38,12 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
             return await SendPromptAsync(prompt, temperature: 0.2);
         }
 
-        // ==================== NEW METHODS - STRUCTURED RESPONSES ====================
+        // ==================== STRUCTURED RESPONSES ====================
 
-        /// <summary>
-        /// Generate AI hint with structured response
-        /// </summary>
-        public async Task<HintResponse?> GenerateHintStructuredAsync(HintRequest request)
+        public async Task<AIHintResponse?> GenerateHintStructuredAsync(AIHintRequest request)
         {
             try
             {
-                _logger.LogInformation($"Generating hint for question {request.QuestionId}, level {request.HintLevel}");
-
                 var jsonContent = JsonSerializer.Serialize(request);
                 var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
@@ -61,21 +57,8 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
                 }
 
                 var responseContent = await response.Content.ReadAsStringAsync();
-                var hintResponse = JsonSerializer.Deserialize<HintResponse>(responseContent,
+                return JsonSerializer.Deserialize<AIHintResponse>(responseContent,
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-                _logger.LogInformation($"Hint generated successfully: {hintResponse?.Status}");
-                return hintResponse;
-            }
-            catch (HttpRequestException ex)
-            {
-                _logger.LogError($"HTTP Error calling AI Hint API: {ex.Message}");
-                return null;
-            }
-            catch (JsonException ex)
-            {
-                _logger.LogError($"JSON Deserialization Error: {ex.Message}");
-                return null;
             }
             catch (Exception ex)
             {
@@ -84,15 +67,10 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
             }
         }
 
-        /// <summary>
-        /// Generate AI feedback with structured response
-        /// </summary>
-        public async Task<FeedbackResponse?> GenerateFeedbackStructuredAsync(FeedbackRequest request)
+        public async Task<AIFeedbackResponse?> GenerateFeedbackStructuredAsync(AIFeedbackRequest request)
         {
             try
             {
-                _logger.LogInformation($"Generating feedback for attempt {request.AttemptId}");
-
                 var jsonContent = JsonSerializer.Serialize(request);
                 var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
@@ -106,25 +84,39 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
                 }
 
                 var responseContent = await response.Content.ReadAsStringAsync();
-                var feedbackResponse = JsonSerializer.Deserialize<FeedbackResponse>(responseContent,
+                return JsonSerializer.Deserialize<AIFeedbackResponse>(responseContent,
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-                _logger.LogInformation($"Feedback generated successfully: {feedbackResponse?.Status}");
-                return feedbackResponse;
-            }
-            catch (HttpRequestException ex)
-            {
-                _logger.LogError($"HTTP Error calling AI Feedback API: {ex.Message}");
-                return null;
-            }
-            catch (JsonException ex)
-            {
-                _logger.LogError($"JSON Deserialization Error: {ex.Message}");
-                return null;
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error generating feedback: {ex.Message}");
+                return null;
+            }
+        }
+
+        public async Task<AIInsightResponse?> GenerateInsightStructuredAsync(AIInsightRequest request)
+        {
+            try
+            {
+                var jsonContent = JsonSerializer.Serialize(request);
+                var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
+                var response = await _httpClient.PostAsync("/api/ai-insights", content);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    _logger.LogError($"AI Insight API Error: {response.StatusCode} - {errorContent}");
+                    return null;
+                }
+
+                var responseContent = await response.Content.ReadAsStringAsync();
+                return JsonSerializer.Deserialize<AIInsightResponse>(responseContent,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error generating insight: {ex.Message}");
                 return null;
             }
         }
@@ -134,15 +126,10 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
         {
             try
             {
-                // For backward compatibility - returns basic string response
-                // In production, use GenerateHintStructuredAsync or GenerateFeedbackStructuredAsync
-
-                var hintRequest = new HintRequest
+                var hintRequest = new AIHintRequest
                 {
                     QuestionText = prompt,
-                    QuestionType = "Essay",
                     DifficultyLevel = "Medium",
-                    StudentAnswer = "Chưa trả lời",
                     HintLevel = 1
                 };
 
@@ -159,205 +146,34 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
         // ==================== CHATBOT METHODS ====================
         public async Task<ChatbotResponse?> SendChatbotMessageAsync(ChatbotMessageRequest request)
         {
-            try
-            {
-                var jsonContent = JsonSerializer.Serialize(request);
-                var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
-
-                _logger.LogInformation($"[Chatbot] Sending message: {request.Text}, User: {request.UserId}");
-                var response = await _httpClient.PostAsync("/api/chatbot/message", content);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    var errorMsg = await response.Content.ReadAsStringAsync();
-                    _logger.LogError($"[Chatbot] API error: {response.StatusCode} - {errorMsg}");
-                    return new ChatbotResponse { Success = false, Error = $"AI Server Error: {response.StatusCode}" };
-                }
-
-                var responseString = await response.Content.ReadAsStringAsync();
-                return JsonSerializer.Deserialize<ChatbotResponse>(responseString, 
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError($"[Chatbot] Error sending message: {ex.Message}");
-                return new ChatbotResponse { Success = false, Error = ex.Message };
-            }
+            return await PostChatbotAsync("/api/chatbot/message", request);
         }
 
         public async Task<ChatbotResponse?> SendChatbotQuickReplyAsync(ChatbotQuickReplyRequest request)
         {
-            try
-            {
-                var jsonContent = JsonSerializer.Serialize(request);
-                var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
-
-                _logger.LogInformation($"[Chatbot] Sending quick reply: {request.Reply}, User: {request.UserId}");
-                var response = await _httpClient.PostAsync("/api/chatbot/quick-reply", content);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    var errorMsg = await response.Content.ReadAsStringAsync();
-                    _logger.LogError($"[Chatbot] API error: {response.StatusCode} - {errorMsg}");
-                    return new ChatbotResponse { Success = false, Error = $"AI Server Error: {response.StatusCode}" };
-                }
-
-                var responseString = await response.Content.ReadAsStringAsync();
-                return JsonSerializer.Deserialize<ChatbotResponse>(responseString,
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError($"[Chatbot] Error sending quick reply: {ex.Message}");
-                return new ChatbotResponse { Success = false, Error = ex.Message };
-            }
+            return await PostChatbotAsync("/api/chatbot/quick-reply", request);
         }
 
         public async Task<ChatbotResponse?> SendChatbotTriggerAsync(ChatbotTriggerRequest request)
+        {
+            return await PostChatbotAsync("/api/chatbot/trigger", request);
+        }
+
+        private async Task<ChatbotResponse?> PostChatbotAsync<T>(string endpoint, T request)
         {
             try
             {
                 var jsonContent = JsonSerializer.Serialize(request);
                 var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+                var response = await _httpClient.PostAsync(endpoint, content);
 
-                _logger.LogInformation($"[Chatbot] Sending trigger: {request.Trigger}, User: {request.UserId}");
-                var response = await _httpClient.PostAsync("/api/chatbot/trigger", content);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    var errorMsg = await response.Content.ReadAsStringAsync();
-                    _logger.LogError($"[Chatbot] API error: {response.StatusCode} - {errorMsg}");
-                    return new ChatbotResponse { Success = false, Error = $"AI Server Error: {response.StatusCode}" };
-                }
+                if (!response.IsSuccessStatusCode) return null;
 
                 var responseString = await response.Content.ReadAsStringAsync();
                 return JsonSerializer.Deserialize<ChatbotResponse>(responseString,
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             }
-            catch (Exception ex)
-            {
-                _logger.LogError($"[Chatbot] Error sending trigger: {ex.Message}");
-                return new ChatbotResponse { Success = false, Error = ex.Message };
-            }
+            catch { return null; }
         }
-    }
-
-    // ==================== REQUEST DTOs ====================
-    public class HintRequest
-    {
-        [JsonPropertyName("question_text")]
-        public string QuestionText { get; set; }
-
-        [JsonPropertyName("question_type")]
-        public string QuestionType { get; set; }
-
-        [JsonPropertyName("difficulty_level")]
-        public string DifficultyLevel { get; set; }
-
-        [JsonPropertyName("student_answer")]
-        public string StudentAnswer { get; set; }
-
-        [JsonPropertyName("hint_level")]
-        public int HintLevel { get; set; } = 1;
-
-        [JsonPropertyName("question_id")]
-        public int? QuestionId { get; set; }
-
-        [JsonPropertyName("question_image_url")]
-        public string? QuestionImageUrl { get; set; }
-
-        [JsonPropertyName("options")]
-        // SỬA: Dùng AIOptionDto thay vì OptionDto để tránh trùng
-        public List<AIOptionDto>? Options { get; set; }
-    }
-
-    public class FeedbackRequest
-    {
-        [JsonPropertyName("question_text")]
-        public string QuestionText { get; set; }
-
-        [JsonPropertyName("question_type")]
-        public string QuestionType { get; set; }
-
-        [JsonPropertyName("student_answer")]
-        public string StudentAnswer { get; set; }
-
-        [JsonPropertyName("correct_answer")]
-        public string CorrectAnswer { get; set; }
-
-        [JsonPropertyName("is_correct")]
-        public bool IsCorrect { get; set; }
-
-        [JsonPropertyName("explanation")]
-        public string? Explanation { get; set; }
-
-        [JsonPropertyName("attempt_id")]
-        public int? AttemptId { get; set; }
-
-        [JsonPropertyName("question_id")]
-        public int? QuestionId { get; set; }
-
-        [JsonPropertyName("question_image_url")]
-        public string? QuestionImageUrl { get; set; }
-
-        [JsonPropertyName("options")]
-        // SỬA: Dùng AIOptionDto thay vì OptionDto để tránh trùng
-        public List<AIOptionDto>? Options { get; set; }
-    }
-
-    // SỬA: Đổi tên class này thành AIOptionDto
-    public class AIOptionDto
-    {
-        [JsonPropertyName("option_id")]
-        public int OptionId { get; set; }
-
-        [JsonPropertyName("option_text")]
-        public string OptionText { get; set; }
-
-        [JsonPropertyName("image_url")]
-        public string? ImageUrl { get; set; }
-
-        [JsonPropertyName("is_correct")]
-        public bool IsCorrect { get; set; }
-    }
-
-    // ==================== RESPONSE DTOs ====================
-    public class HintResponse
-    {
-        [JsonPropertyName("hint_text")]
-        public string HintText { get; set; }
-
-        [JsonPropertyName("hint_level")]
-        public int HintLevel { get; set; }
-
-        [JsonPropertyName("question_id")]
-        public int? QuestionId { get; set; }
-
-        [JsonPropertyName("status")]
-        public string Status { get; set; }
-
-        [JsonPropertyName("error")]
-        public string? Error { get; set; }
-    }
-
-    public class FeedbackResponse
-    {
-        [JsonPropertyName("full_solution")]
-        public string FullSolution { get; set; }
-
-        [JsonPropertyName("mistake_analysis")]
-        public string MistakeAnalysis { get; set; }
-
-        [JsonPropertyName("improvement_advice")]
-        public string ImprovementAdvice { get; set; }
-
-        [JsonPropertyName("attempt_id")]
-        public int? AttemptId { get; set; }
-
-        [JsonPropertyName("status")]
-        public string Status { get; set; }
-
-        [JsonPropertyName("error")]
-        public string? Error { get; set; }
     }
 }
