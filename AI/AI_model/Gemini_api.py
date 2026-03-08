@@ -163,6 +163,21 @@ class GeminiAIService:
             response_text = response.get("text", "")
             logger.info(f"Raw AI Feedback Response: {response_text}")
             
+            # Nếu response rỗng → thử lại với key tiếp theo
+            if not response_text or not response_text.strip():
+                logger.warning("Empty response from Gemini API, rotating key and retrying...")
+                api_key_manager.rotate_key()
+                api_key_manager.configure()
+                self.model = genai.GenerativeModel(
+                    self.model_name,
+                    generation_config={"response_mime_type": "application/json"}
+                )
+                retry_response = self._call_api_with_retry(content)
+                response_text = retry_response.get("text", "")
+                if not response_text or not response_text.strip():
+                    logger.error("Empty response even after retry")
+                    return {"status": "error", "error": "Empty response from AI"}
+            
             cleaned_text = self._clean_json_text(response_text)
             data = json.loads(cleaned_text, strict=False)
             
@@ -255,7 +270,16 @@ class GeminiAIService:
         elif "```" in text:
             text = text.split("```")[-1].split("```")[0]
                 
-        return text.strip()
+        text = text.strip()
+        
+        # Đảm bảo import re ở đầu file nếu dùng.
+        import re
+        # Sửa lỗi Invalid escape do Gemini thỉnh thoảng trả về '\' thừa (vd: '\Tuy nhiên')
+        # Dùng regex để thay thế '\' bằng '\\' đối với những escape không hợp lệ của JSON.
+        # Bổ sung chữ 'u' cho mã unicode (\uXXXX)
+        text = re.sub(r'\\([^"\\/bfnrtu])', r'\\\\\1', text)
+        
+        return text
     
     def _download_image(self, image_url: str) -> Optional[Image.Image]:
         """Download image from URL and convert to PIL Image"""

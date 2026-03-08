@@ -199,37 +199,47 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
                 await transaction.CommitAsync();
 
                 // ✅ Kích hoạt AI tạo lời giải cho các câu sai trong background
-                var wrongAnswerDetails = answerDetails.Where(d => !d.IsCorrect).ToList();
+                // Chỉ lấy câu học sinh ĐÃ TRẢ LỜI NHƯNG SAI (loại bỏ câu bỏ trống)
+                var wrongAnswerDetails = answerDetails
+                    .Where(d => !d.IsCorrect && d.StudentAnswer != null)
+                    .ToList();
+
+                Console.WriteLine($"[AI Feedback] AttemptId={attempt.AttemptId} | Sai: {wrongAnswerDetails.Count} câu");
+
                 if (wrongAnswerDetails.Any())
                 {
-                    _ = Task.Run(async () =>
+                    try
                     {
-                        try
+                        var aiTasks = wrongAnswerDetails.Select(async w =>
                         {
-                            using var scope = _scopeFactory.CreateScope();
-                            var feedbackService = scope.ServiceProvider.GetRequiredService<IAIFeedbackService>();
-                            foreach (var w in wrongAnswerDetails)
+                            Console.WriteLine($"[AI Feedback] Đang tạo feedback cho QuestionId={w.QuestionId}, AttemptId={attempt.AttemptId}");
+                            try
                             {
-                                try
+                                // ✅ TẠO SCOPE RIÊNG CHO TỪNG TASK
+                                using var scope = _scopeFactory.CreateScope();
+                                var feedbackService = scope.ServiceProvider.GetRequiredService<IAIFeedbackService>();
+                                
+                                var result = await feedbackService.CreateAsync(new CreateAIFeedbackDto
                                 {
-                                    await feedbackService.CreateAsync(new CreateAIFeedbackDto
-                                    {
-                                        AttemptId = attempt.AttemptId,
-                                        QuestionId = w.QuestionId,
-                                        StudentAnswer = w.StudentAnswer
-                                    });
-                                }
-                                catch (Exception ex)
-                                {
-                                    Console.WriteLine($"[AI Feedback Error] Attempt {attempt.AttemptId}, Question {w.QuestionId}: {ex.Message}");
-                                }
+                                    AttemptId = attempt.AttemptId,
+                                    QuestionId = w.QuestionId,
+                                    StudentAnswer = w.StudentAnswer
+                                });
+                                Console.WriteLine($"[AI Feedback] QuestionId={w.QuestionId}: {(result.Success ? "✅ OK" : "❌ Lỗi: " + result.Message)}");
                             }
-                        }
-                        catch (Exception globalEx)
-                        {
-                            Console.WriteLine($"[AI Feedback Fatal Error]: {globalEx.Message}");
-                        }
-                    });
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine($"[AI Feedback Error] Attempt {attempt.AttemptId}, Question {w.QuestionId}: {ex.GetType().Name} - {ex.Message}");
+                            }
+                        });
+                        
+                        // Đợi TẤT CẢ các câu được AI chấm xong mới nộp bài được
+                        await Task.WhenAll(aiTasks);
+                    }
+                    catch (Exception globalEx)
+                    {
+                        Console.WriteLine($"[AI Feedback Fatal Error]: {globalEx.GetType().Name} - {globalEx.Message}");
+                    }
                 }
 
                 // 7. Trả kết quả

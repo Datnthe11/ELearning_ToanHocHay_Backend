@@ -67,7 +67,10 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
                     QuestionType = question.QuestionType.ToString(),
                     StudentAnswer = dto.StudentAnswer ?? "Không có câu trả lời",
                     CorrectAnswer = question.CorrectAnswer ?? string.Empty,
-                    IsCorrect = dto.StudentAnswer != null && dto.StudentAnswer != "Bạn chưa trả lời câu hỏi này", // Adjust as needed
+                    // So sánh đúng: câu trả lời của học sinh có trùng với đáp án đúng không 
+                    IsCorrect = !string.IsNullOrWhiteSpace(dto.StudentAnswer)
+                                && !dto.StudentAnswer.Equals("Bạn chưa trả lời câu hỏi này")
+                                && dto.StudentAnswer.Trim().Equals(question.CorrectAnswer?.Trim() ?? "", StringComparison.OrdinalIgnoreCase),
                     Explanation = question.Explanation,
                     AttemptId = dto.AttemptId,
                     QuestionId = dto.QuestionId,
