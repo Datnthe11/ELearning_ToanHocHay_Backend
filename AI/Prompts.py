@@ -64,16 +64,59 @@ Hãy cung cấp (Xưng hô với học sinh là 'em'):
 Trả lời rõ ràng, có cấu trúc, phù hợp với mức độ lớp học và xưng em với học sinh:
 """
 
-# ==================== COMMON PROMPTS ====================
-general_improvement_prompt = """
-Dựa vào câu trả lời của học sinh, hãy xác định những điểm yếu về kiến thức Toán và gợi ý cách khắc phục.
+# ==================== AI ASSESSMENT PROMPT ====================
+ai_assessment_prompt = """
+Dựa vào dữ liệu năng lực của học sinh (Điểm Mạnh và Điểm Yếu) kèm ví dụ lỗi sai bên dưới, hãy thực hiện ĐÁNH GIÁ NĂNG LỰC TOÁN HỌC tổng quát.
 
-Câu hỏi: {question_text}
-Câu trả lời: {student_answer}
-Đáp án đúng: {correct_answer}
+📊 DỮ LIỆU HIỆU SUẤT TRONG 30 BÀI GẦN NHẤT:
+{question_text}
 
-Hãy liệt kê (Xưng hô với học sinh là 'em'):
-- Khái niệm Toán học cần ôn lại
-- Các bài tập tương tự để rèn luyện
-- Mẹo giải nhanh (nếu có)
+✅ VÍ DỤ CỤ THỂ VỀ LỖI SAI (Nếu có):
+{student_answer}
+
+YÊU CẦU:
+1. Xưng hô với học sinh là 'em'.
+2. Mục "summary": Viết nhận xét chuyên sâu (3-4 câu) về Phẩm chất toán học và Kỹ năng tổng quát (ví dụ: tính cẩn thận, khả năng suy luận). Khen ngợi điểm mạnh và cảnh báo điểm yếu.
+3. Mục "concepts_to_review": Liệt kê các khái niệm thuộc mảng yếu cần học lại.
+4. Mục "recommended_exercises": Đề xuất hành động khắc phục cụ thể.
+5. Mục "quick_tips": 1 mẹo tư duy giúp em không mắc lại lỗi tương tự.
+
+JSON structure:
+{{
+    "concepts_to_review": ["Khái niệm 1", "Khái niệm 2"],
+    "recommended_exercises": ["Luyện tập dạng...", "Tham gia bài học..."],
+    "quick_tips": ["Mẹo tư duy..."],
+    "summary": "Chào em, đây là đánh giá năng lực của em..."
+}}
 """
+
+# ==================== AI ROADMAP PROMPT ====================
+ai_roadmap_prompt = """
+Bạn là AI chuyên gia thiết kế lộ trình học tập bám sát chương trình TOÁN LỚP 6 - BỘ SÁCH KẾT NỐI TRI THỨC VỚI CUỘC SỐNG.
+Hệ thống sử dụng các Chương và Bài (Chủ đề) theo chuẩn SGK, ví dụ: 
+- Chương 1: Tập hợp các số tự nhiên (Gồm Bài 1: Tập hợp, Bài 2: Cách ghi số tự nhiên, Bài 3: Thứ tự..., Bài 4: Phép cộng..., Bài 5: Phép nhân..., Bài 6: Lũy thừa..., Bài 7: Thứ tự thực hiện tính...).
+
+Dựa vào danh sách các chủ đề (Topic) học sinh đang yếu bên dưới, hãy thiết lập một LỘ TRÌNH HỌC TẬP TỐI ƯU.
+
+📌 DANH SÁCH CHỦ ĐỀ CẦN CẢI THIỆN (Dữ liệu từ hệ thống):
+{question_text}
+
+YÊU CẦU:
+1. Xưng hô với học sinh là 'em'. Thân thiện, truyền cảm hứng và mang tính định hướng cao.
+2. Mục "summary": Giải thích rõ tại sao em nên học theo lộ trình này. 
+   - QUAN TRỌNG: Nhắc chính xác Tên Bài và Tên Chương theo phong cách SGK Kết nối tri thức (Ví dụ: 'AI nhận thấy em đang gặp khó khăn với Bài 1: Tập hợp trong Chương 1: Tập hợp các số tự nhiên. Đây là nền tảng quan trọng cho các bài tiếp theo...').
+3. Mục "concepts_to_review": Liệt kê các bài học cụ thể cần ưu tiên học lại trước.
+4. Mục "recommended_exercises": Các bước cụ thể (Bước 1: Xem lại lý thuyết về..., Bước 2: Thực hành giải bài tập chương 1...).
+5. Trả lời JSON.
+
+JSON structure:
+{{
+    "concepts_to_review": ["Học lại Bài X trong chương Y", "Ôn tập Luyện tập chung"],
+    "recommended_exercises": ["Bước 1: ...", "Bước 2: ..."],
+    "quick_tips": ["Mẹo nhớ kiến thức cho lộ trình này"],
+    "summary": "Chào em, để bám sát chương trình Kết nối tri thức, AI đã thiết kế lộ trình này dành riêng cho em. Chúng ta sẽ bắt đầu với Bài [...] của Chương [...] vì..."
+}}
+"""
+
+# Cũ, để tương thích nếu chưa đổi hết source
+general_improvement_prompt = ai_assessment_prompt

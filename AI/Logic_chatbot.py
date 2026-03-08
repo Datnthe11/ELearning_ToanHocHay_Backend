@@ -76,16 +76,34 @@ class ChatbotLogicBackend:
         r = reply.lower().strip()
         logger.info(f"Processing Quick Reply: '{r}'")
 
-        # Dùng 'in' để so sánh từ khóa, tránh lỗi Encoding hoặc sai lệch 1-2 chữ
+        # ===== 1. XỬ LÝ CÁC OPTION CỤ THỂ TRƯỚC (Để tránh lặp vô hạn hoặc bắt nhầm) =====
         
-        # ===== Main flows (từ fallback menu / trigger đầu tiên) =====
-        if "tư vấn" in r and "lớp 6" in r:
+        # Nhóm hiện FORM (Tư vấn thêm, Nhận báo cáo mẫu, Học thử, Nhờ bố mẹ)
+        if any(kw in r for kw in ["tư vấn thêm", "tư vấn chi tiết", "được tư vấn", "nhận báo cáo", "báo cáo mẫu", "cho con học thử", "nhờ bố", "nhờ mẹ"]):
+            return self._flow_hoc_thu_parent(user) # Reuse form flow
+
+        # Nhóm Học thử của học sinh
+        elif r == "học thử": 
+            return self._flow_hoc_thu_parent(user)
+
+        elif "nhờ" in r and ("bố" in r or "mẹ" in r):
+            return self._flow_hoc_thu_parent_help(user)
+
+        # Nhóm Tìm hiểu thêm / Xem lộ trình
+        elif "tìm hiểu thêm" in r or ("xem" in r and "lộ trình" in r):
+            return self._flow_tu_van_more(user)
+
+        elif "liên hệ" in r or "nhân viên" in r or "gọi điện" in r:
+            return self._flow_handover(user)
+
+        # ===== 2. XỬ LÝ CÁC FLOW CHÍNH (Fallback menu) =====
+        elif "tư vấn" in r and "lớp 6" in r:
             return self._flow_tu_van(user)
         
-        elif "học thử miễn phí" in r:  # FIX: chỉ khớp khi có đủ "miễn phí", tránh bắt nhầm option "Học thử" của student
+        elif "học thử miễn phí" in r:
             return self._flow_hoc_thu_student(user)
             
-        elif "báo cáo tiến độ mẫu" in r:  # FIX: khớp chính xác option fallback menu
+        elif "báo cáo tiến độ mẫu" in r:
             return self._flow_bao_cao(user)
             
         elif "hay làm sai" in r or ("không hiểu" in r and "sai" in r):
@@ -100,46 +118,10 @@ class ChatbotLogicBackend:
         elif "theo sát" in r:
             return self._flow_theo_sat(user)
             
-        elif "học phí" in r or ("lộ trình" in r and "xem" not in r):
+        elif "học phí" in r:
             return self._flow_hoc_phi(user)
-        
-        # ===== Sub-option flows =====
-        # Từ _flow_con_hay_lam_sai: "Có, cho con học thử"
-        # FIX: đặt TRƯỚC nhánh "học thử" chung để không bị bắt nhầm
-        elif "cho con học thử" in r:
-            return self._flow_hoc_thu_parent(user)
-        
-        elif "tìm hiểu thêm" in r:
-            return self._flow_tu_van_more(user)
-        
-        # Từ _flow_hoc_thu_student: "Nhờ bố/mẹ xem giúp"
-        elif "nhờ" in r and ("bố" in r or "mẹ" in r):
-            return self._flow_hoc_thu_parent_help(user)
-        
-        # Từ _flow_hoc_thu_student: "Học thử" (student tự học thử)
-        elif r == "học thử":  # FIX: so sánh chính xác để không bắt các option khác
-            return self._flow_hoc_thu_parent(user)
-        
-        # Từ _flow_bao_cao: "Nhận báo cáo mẫu"
-        # FIX: đổi sang handover thay vì gọi lại bao_cao → tránh vòng lặp vô hạn
-        elif "nhận báo cáo" in r or "báo cáo mẫu" in r:
-            return self._flow_handover(user)
-        
-        # Từ _flow_bao_cao / _flow_hoc_phi: "Tư vấn thêm" / "Được tư vấn chi tiết"
-        elif "tư vấn thêm" in r or "tư vấn chi tiết" in r or "được tư vấn" in r:
-            return self._flow_handover(user)
-        
-        # Từ _flow_hoc_phi: "Xem lộ trình học"
-        elif "xem" in r and "lộ trình" in r:
-            return self._flow_tu_van_more(user)
-        
-        elif "cho con học thử trước" in r:
-            return self._flow_hoc_thu_parent(user)
             
-        elif "liên hệ" in r or "nhân viên" in r or "gọi điện" in r:
-            return self._flow_handover(user)
-            
-        # FIX: Fallback nên dùng _flow_fallback (hiện menu) thay vì _flow_handover
+        # Fallback
         logger.warning(f"✗ Vẫn không khớp: '{r}'")
         return self._flow_fallback(user)
 
@@ -309,7 +291,7 @@ class ChatbotLogicBackend:
             "type": "form",
             "message": (
                 "ToánHọcHay hiện có chương trình học thử miễn phí cho học sinh lớp 6.\n"
-                "Anh/chị để lại thông tin để bên mình gửi hướng dẫn cho con nhé."
+                "Anh/chị (hoặc các em nhờ bố mẹ) để lại thông tin để bên mình gửi hướng dẫn học thử nhé."
             ),
             "form_fields": [
                 "Họ tên phụ huynh (bắt buộc)",

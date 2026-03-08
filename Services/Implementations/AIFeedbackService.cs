@@ -45,6 +45,14 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
             string mistakeAnalysis = dto.MistakeAnalysis ?? string.Empty;
             string improvementAdvice = dto.ImprovementAdvice ?? string.Empty;
 
+            // KIỂM TRA XEM ĐÃ CÓ FEEDBACK CHƯA
+            var existingFeedbacks = await _feedbackRepository.GetByAttemptAsync(dto.AttemptId);
+            var existing = existingFeedbacks.FirstOrDefault(f => f.QuestionId == dto.QuestionId);
+            if (existing != null)
+            {
+                return ApiResponse<AIFeedbackDto>.SuccessResponse(MapToDto(existing), "Feedback already exists");
+            }
+
             // Nếu dữ liệu trống, gọi AI sinh mới
             if (string.IsNullOrWhiteSpace(fullSolution))
             {
@@ -57,9 +65,9 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
                 {
                     QuestionText = question.QuestionText ?? string.Empty,
                     QuestionType = question.QuestionType.ToString(),
-                    StudentAnswer = studentAnswer?.AnswerText ?? "Không có câu trả lời",
+                    StudentAnswer = dto.StudentAnswer ?? "Không có câu trả lời",
                     CorrectAnswer = question.CorrectAnswer ?? string.Empty,
-                    IsCorrect = studentAnswer?.IsCorrect ?? false,
+                    IsCorrect = dto.StudentAnswer != null && dto.StudentAnswer != "Bạn chưa trả lời câu hỏi này", // Adjust as needed
                     Explanation = question.Explanation,
                     AttemptId = dto.AttemptId,
                     QuestionId = dto.QuestionId,
@@ -84,6 +92,7 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
                 else
                 {
                     _logger.LogError("AI Service failed to generate feedback");
+                    return ApiResponse<AIFeedbackDto>.ErrorResponse("AI Service failed to generate feedback");
                 }
             }
 

@@ -107,10 +107,13 @@ namespace ELearning_ToanHocHay_Control.Models.DTOs.AI
         public string QuestionText { get; set; }
 
         [JsonPropertyName("student_answer")]
-        public string StudentAnswer { get; set; }
+        public string StudentAnswer { get; set; } = string.Empty;
 
         [JsonPropertyName("correct_answer")]
-        public string CorrectAnswer { get; set; }
+        public string CorrectAnswer { get; set; } = string.Empty;
+
+        [JsonPropertyName("type")]
+        public string Type { get; set; } = "assessment";
     }
 
     public class AIInsightResponse
@@ -129,6 +132,9 @@ namespace ELearning_ToanHocHay_Control.Models.DTOs.AI
 
         [JsonPropertyName("status")]
         public string Status { get; set; } = string.Empty;
+
+        [JsonPropertyName("lesson_id")]
+        public int? LessonId { get; set; }
     }
 
     public class AIOptionDto

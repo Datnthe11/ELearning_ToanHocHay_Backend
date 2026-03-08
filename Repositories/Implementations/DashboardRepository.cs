@@ -282,6 +282,71 @@ namespace ELearning_ToanHocHay_Control.Repositories.Implementations
                 .OrderBy(x => x.ChapterId)
                 .ToList();
         }
+        
+        public async Task<List<WeakTopicDto>> GetWeakTopicsAsync(int studentId, int limit)
+        {
+            // Lấy 20 bài làm gần nhất có lỗi sai
+            var recentMistakes = await _context.ExerciseAttempts
+                .AsNoTracking()
+                .Where(a => a.StudentId == studentId && a.WrongAnswers > 0 && a.Exercise != null && a.Exercise.Topic != null)
+                .Include(a => a.Exercise)
+                    .ThenInclude(e => e.Topic)
+                        .ThenInclude(t => t.Chapter)
+                .Include(a => a.Exercise)
+                    .ThenInclude(e => e.Topic)
+                        .ThenInclude(t => t.Lessons)
+                .OrderByDescending(a => a.SubmittedAt)
+                .Take(20)
+                .ToListAsync();
+            
+            if (!recentMistakes.Any()) return new List<WeakTopicDto>();
+            
+            // Nhóm theo topic và đếm số lỗi tổng cộng trong 20 bài gần đây
+            return recentMistakes
+                .GroupBy(a => a.Exercise.Topic)
+                .Select(g => new WeakTopicDto
+                {
+                    TopicId = g.Key.TopicId,
+                    TopicName = g.Key.TopicName,
+                    ChapterName = g.Key.Chapter?.ChapterName ?? "N/A",
+                    ErrorCount = g.Sum(a => a.WrongAnswers),
+                    FirstLessonId = g.Key.Lessons?.OrderBy(l => l.OrderIndex).FirstOrDefault()?.LessonId,
+                    LessonNames = g.Key.Lessons?
+                                    .OrderBy(l => l.OrderIndex)
+                                    .Select(l => l.LessonName)
+                                    .Take(3)
+                                    .ToList() ?? new List<string>()
+                })
+                .OrderByDescending(x => x.ErrorCount)
+                .Take(limit)
+                .ToList();
+        }
+
+        public async Task<List<TopicPerformanceDto>> GetFullPerformanceAsync(int studentId)
+        {
+            var attempts = await _context.ExerciseAttempts
+                .AsNoTracking()
+                .Where(a => a.StudentId == studentId && a.Status != AttemptStatus.InProgress && a.Exercise != null && a.Exercise.Topic != null)
+                .Include(a => a.Exercise)
+                    .ThenInclude(e => e.Topic)
+                        .ThenInclude(t => t.Chapter)
+                .OrderByDescending(a => a.SubmittedAt)
+                .Take(30)
+                .ToListAsync();
+            
+            if (!attempts.Any()) return new List<TopicPerformanceDto>();
+            
+            return attempts
+                .GroupBy(a => a.Exercise.Topic)
+                .Select(g => new TopicPerformanceDto
+                {
+                    TopicName = g.Key.TopicName,
+                    ChapterName = g.Key.Chapter?.ChapterName ?? "N/A",
+                    TotalAttempts = g.Count(),
+                    AverageScore = Math.Round(g.Average(a => (decimal)a.TotalScore / (decimal)a.MaxScore * 10m), 1)
+                })
+                .ToList();
+        }
 
         // ==================== PRIVATE HELPERS ====================
 
