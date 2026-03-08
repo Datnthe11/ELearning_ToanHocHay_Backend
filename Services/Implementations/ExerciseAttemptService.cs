@@ -198,6 +198,40 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
+                // ✅ Kích hoạt AI tạo lời giải cho các câu sai trong background
+                var wrongAnswerDetails = answerDetails.Where(d => !d.IsCorrect).ToList();
+                if (wrongAnswerDetails.Any())
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            using var scope = _scopeFactory.CreateScope();
+                            var feedbackService = scope.ServiceProvider.GetRequiredService<IAIFeedbackService>();
+                            foreach (var w in wrongAnswerDetails)
+                            {
+                                try
+                                {
+                                    await feedbackService.CreateAsync(new CreateAIFeedbackDto
+                                    {
+                                        AttemptId = attempt.AttemptId,
+                                        QuestionId = w.QuestionId,
+                                        StudentAnswer = w.StudentAnswer
+                                    });
+                                }
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine($"[AI Feedback Error] Attempt {attempt.AttemptId}, Question {w.QuestionId}: {ex.Message}");
+                                }
+                            }
+                        }
+                        catch (Exception globalEx)
+                        {
+                            Console.WriteLine($"[AI Feedback Fatal Error]: {globalEx.Message}");
+                        }
+                    });
+                }
+
                 // 7. Trả kết quả
                 var result = new ExerciseResultDto
                 {
