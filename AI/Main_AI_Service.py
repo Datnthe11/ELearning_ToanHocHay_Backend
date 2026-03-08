@@ -243,7 +243,8 @@ def generate_ai_insight():
         result = gemini_ai.generate_insight(
             question_text=data.get('question_text'),
             student_answer=data.get('student_answer'),
-            correct_answer=data.get('correct_answer')
+            correct_answer=data.get('correct_answer'),
+            insight_type=data.get('type', 'assessment')
         )
         return jsonify(result), 200
     except Exception as e:

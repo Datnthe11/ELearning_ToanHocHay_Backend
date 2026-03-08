@@ -3,6 +3,7 @@ using ELearning_ToanHocHay_Control.Data;
 using ELearning_ToanHocHay_Control.Data.Entities;
 using ELearning_ToanHocHay_Control.Models.DTOs;
 using ELearning_ToanHocHay_Control.Models.DTOs.ExerciseAttempt;
+using ELearning_ToanHocHay_Control.Models.DTOs.AIFeedback;
 using ELearning_ToanHocHay_Control.Models.DTOs.Student.Dashboard;
 using ELearning_ToanHocHay_Control.Repositories.Interfaces;
 using ELearning_ToanHocHay_Control.Services.Interfaces;
@@ -10,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Linq; // Bổ sung để hỗ trợ LINQ Queryable
+using Microsoft.Extensions.DependencyInjection;
 using System.Threading.Tasks;
 
 
@@ -25,6 +27,8 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
         private readonly IMapper _mapper;
         private readonly IExerciseQuestionRepository _exerciseQuestionRepository;
         private readonly IAIFeedbackRepository _feedbackRepository;
+        private readonly IAIFeedbackService _aiFeedbackService;
+        private readonly IServiceScopeFactory _scopeFactory;
         private readonly AppDbContext _context;
 
         public ExerciseAttemptService(
@@ -35,6 +39,8 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
             IQuestionBankRepository questionBankRepository,
             IExerciseQuestionRepository exerciseQuestionRepository,
             IAIFeedbackRepository feedbackRepository,
+            IAIFeedbackService aiFeedbackService,
+            IServiceScopeFactory scopeFactory,
             IMapper mapper,
             AppDbContext context) // FIX: Thêm context vào đây
         {
@@ -45,6 +51,8 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
             _questionBankRepository = questionBankRepository;
             _exerciseQuestionRepository = exerciseQuestionRepository;
             _feedbackRepository = feedbackRepository;
+            _aiFeedbackService = aiFeedbackService;
+            _scopeFactory = scopeFactory;
             _mapper = mapper;
             _context = context; // FIX: Gán giá trị để không bị Null
         }
@@ -113,9 +121,13 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
                                 {
                                     var correctOption = question.QuestionOptions?
                                         .FirstOrDefault(o => o.IsCorrect);
-
-                                    // THÊM DÒNG NÀY
-                                    Console.WriteLine($"=== CHẤM qId={question.QuestionId} | studentOpt={answer.SelectedOptionId} | correctOpt={correctOption?.OptionId} | match={correctOption?.OptionId == answer.SelectedOptionId} ===");
+                                    
+                                    // BỔ SUNG: Lưu Text của option vào AnswerText để AI có thể đọc được
+                                    var selectedOpt = question.QuestionOptions?.FirstOrDefault(o => o.OptionId == answer.SelectedOptionId.Value);
+                                    if (selectedOpt != null) 
+                                    {
+                                        answer.AnswerText = selectedOpt.OptionText;
+                                    }
 
                                     isCorrect = correctOption != null &&
                                         correctOption?.OptionId == answer.SelectedOptionId;
@@ -202,7 +214,54 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
-                // 7. Trả kết quả
+                // 7. CHỜ AI PHÂN TÍCH XONG MỚI TRẢ KẾT QUẢ (Để đảm bảo Review có dữ liệu ngay)
+                try
+                {
+                    // Lấy ra danh sách các câu sai cần AI feedback
+                    var questionsToAnalyze = answerDetails
+                        .Where(d => !d.IsCorrect && !string.IsNullOrEmpty(d.StudentAnswer) && d.StudentAnswer != "Bạn chưa trả lời câu hỏi này")
+                        .ToList();
+
+                    Console.WriteLine($"[AI FEEDBACK] Found {questionsToAnalyze.Count} incorrect questions to analyze for Attempt {attempt.AttemptId}");
+
+                    if (questionsToAnalyze.Any())
+                    {
+                        // CHẠY TUẦN TỰ để đảm bảo độ tin cậy của DB Context và AI Rate Limit
+                        foreach (var detail in questionsToAnalyze)
+                        {
+                            Console.WriteLine($"[AI FEEDBACK] Processing Question {detail.QuestionId}...");
+                            using var scope = _scopeFactory.CreateScope();
+                            var scopedFeedbackService = scope.ServiceProvider.GetRequiredService<IAIFeedbackService>();
+                            
+                            await scopedFeedbackService.CreateAsync(new CreateAIFeedbackDto
+                            {
+                                AttemptId = attempt.AttemptId,
+                                QuestionId = detail.QuestionId,
+                                StudentAnswer = detail.StudentAnswer
+                            });
+                        }
+                    }
+
+                    // 7.1. CẬP NHẬT AnswerDetails với Feedback vừa tạo để trả về ngay
+                    var aiFeedbacks = await _feedbackRepository.GetByAttemptAsync(attempt.AttemptId);
+                    var feedbackLookup = aiFeedbacks.GroupBy(f => f.QuestionId).ToDictionary(g => g.Key, g => g.First());
+
+                    foreach (var detail in answerDetails)
+                    {
+                        if (feedbackLookup.TryGetValue(detail.QuestionId, out var fb))
+                        {
+                            detail.FullSolution = fb.FullSolution;
+                            detail.MistakeAnalysis = fb.MistakeAnalysis;
+                            detail.ImprovementAdvice = fb.ImprovementAdvice;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[AI FEEDBACK ERROR] Failed to generate: {ex.Message}");
+                }
+
+                // 8. Trả kết quả
                 var result = new ExerciseResultDto
                 {
                     AttemptId = attempt.AttemptId,
@@ -269,7 +328,7 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
 
                 // Lấy Feedback của AI nếu có
                 var aiFeedbacks = await _feedbackRepository.GetByAttemptAsync(attemptId);
-                var feedbackLookup = aiFeedbacks.ToDictionary(f => f.QuestionId);
+                var feedbackLookup = aiFeedbacks.GroupBy(f => f.QuestionId).ToDictionary(g => g.Key, g => g.First());
 
                 var answerDetails = new List<AnswerDetailDto>();
 

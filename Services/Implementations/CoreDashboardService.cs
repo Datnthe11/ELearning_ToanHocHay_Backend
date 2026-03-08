@@ -17,6 +17,8 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
         private readonly IPackageRepository _packageRepo;
         private readonly IAIService _aiService;
         private readonly IExerciseAttemptRepository _attemptRepo;
+        private readonly IStudentParentRepository _studentParentRepo;
+        private readonly IParentRepository _parentRepo;
         private readonly IMapper _mapper;
         private readonly ILogger<CoreDashboardService> _logger;
 
@@ -26,6 +28,8 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
             IPackageRepository packageRepo,
             IAIService aiService,
             IExerciseAttemptRepository attemptRepo,
+            IStudentParentRepository studentParentRepo,
+            IParentRepository parentRepo,
             IMapper mapper,
             ILogger<CoreDashboardService> logger)
         {
@@ -34,6 +38,8 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
             _packageRepo = packageRepo;
             _aiService = aiService;
             _attemptRepo = attemptRepo;
+            _studentParentRepo = studentParentRepo;
+            _parentRepo = parentRepo;
             _mapper = mapper;
             _logger = logger;
         }
@@ -55,6 +61,7 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
                 RecentLessons = recentLessonsTask,
                 ChapterProgress = chapterProgressTask,
                 PackageType = packageTypeTask,
+                SubscriptionInfo = SubscriptionInfoHelper.BuildSubscriptionInfo(null),
                 Links = GenerateDashboardLinks(studentId, packageTypeTask)
             };
 
@@ -145,6 +152,10 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
 
         public async Task<PackageType> GetPackageTypeAsync(int studentId)
         {
+            // [TEST MODE] Luôn trả về Premium để test tính năng
+            return PackageType.Premium;
+
+            /* Logic thực tế:
             var subscription = await _packageRepo.GetActivePackageAsync(studentId);
             if (subscription?.Package == null) return PackageType.Free;
 
@@ -155,6 +166,7 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
                 var n when n.Contains("standard") => PackageType.Standard,
                 _ => PackageType.Free
             };
+            */
         }
 
         private DashboardLinksDto GenerateDashboardLinks(int studentId, PackageType packageType)
@@ -172,7 +184,19 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
         public async Task<bool> VerifyStudentAccessAsync(int studentId, int userId)
         {
             var student = await _studentRepo.GetByIdAsync(studentId);
-            return student?.UserId == userId;
+            if (student == null) return false;
+
+            // 1. Nếu là chính sinh viên đó
+            if (student.UserId == userId) return true;
+
+            // 2. Nếu là PHỤ HUYNH của sinh viên đó
+            var parent = await _parentRepo.GetByUserIdAsync(userId);
+            if (parent != null)
+            {
+                return await _studentParentRepo.ExistsAsync(studentId, parent.ParentId);
+            }
+
+            return false;
         }
 
         public async Task<List<ChapterScoreComparisonDto>> GetChapterScoreComparisonAsync(int studentId)
@@ -182,41 +206,85 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
 
         public async Task<AIInsightResponse?> GetAIInsightAsync(int studentId)
         {
-            _logger.LogInformation("Generating AI insight for dashboard student {StudentId}", studentId);
+            _logger.LogInformation("Generating detailed strengths/weaknesses AI analysis for student {StudentId}", studentId);
             
-            // Lấy những bài làm gần nhất của học sinh có câu trả lời sai
-            var attempts = await _attemptRepo.GetStudentAttemptsAsync(studentId);
-            var lastAttemptWithMistakes = attempts
-                .Where(a => a.Status != AttemptStatus.InProgress && a.WrongAnswers > 0)
-                .OrderByDescending(a => a.SubmittedAt)
-                .FirstOrDefault();
-
-            if (lastAttemptWithMistakes == null)
+            // 1. Lấy dữ liệu hiệu suất toàn diện
+            var performance = await _dashboardRepo.GetFullPerformanceAsync(studentId);
+            
+            if (performance == null || !performance.Any())
             {
                 return new AIInsightResponse { 
-                    Summary = "Bạn đang làm bài rất tốt và không có lỗi sai nào gần đây. Hãy tiếp tục thử thách mình với các bài tập khó hơn nhé!",
-                    ConceptsToReview = new List<string> { "Duy trì phong độ", "Mở rộng bài tập" },
+                    Summary = "Chào em! Hệ thống đang chờ em hoàn thành bài kiểm tra đầu tiên để bắt đầu phân tích năng lực. Cố lên nhé!",
+                    ConceptsToReview = new List<string> { "Làm bài kiểm tra đầu tiên" },
                     Status = "success" 
                 };
             }
 
-            // Lấy chi tiết bài làm để tìm câu sai
-            var details = await _attemptRepo.GetAttemptWithDetailsAsync(lastAttemptWithMistakes.AttemptId);
-            var wrongAnswer = details.StudentAnswers?.FirstOrDefault(sa => !sa.IsCorrect && sa.Question != null);
+            // Phân loại mạnh/yếu
+            var strengths = performance.Where(p => p.IsStrength).OrderByDescending(p => p.AverageScore).Take(3).ToList();
+            var weaknesses = performance.Where(p => p.IsWeakness).OrderBy(p => p.AverageScore).Take(3).ToList();
 
-            if (wrongAnswer == null || wrongAnswer.Question == null)
+            // 2. Lấy ví dụ câu sai gần nhất
+            var attempts = await _attemptRepo.GetStudentAttemptsAsync(studentId);
+            var lastMistake = attempts.FirstOrDefault(a => a.WrongAnswers > 0);
+            string specificMistakeInfo = "";
+            if (lastMistake != null)
             {
-                return new AIInsightResponse { Summary = "Chúng tôi chưa tìm thấy lỗ hổng kiến thức qua các bài làm gần đây.", Status = "success" };
+                var details = await _attemptRepo.GetAttemptWithDetailsAsync(lastMistake.AttemptId);
+                var wrong = details.StudentAnswers?.FirstOrDefault(sa => !sa.IsCorrect && sa.Question != null);
+                if (wrong != null)
+                {
+                    specificMistakeInfo = $"Ví dụ câu sai gần đây: {wrong.Question.QuestionText} (Em chọn: {wrong.AnswerText}, Đáp án: {wrong.Question.CorrectAnswer})";
+                }
             }
+
+            // 3. Xây dựng prompt
+            var strengthsText = strengths.Any() ? string.Join("\n", strengths.Select(s => $"- {s.TopicName} ({s.AverageScore}/10)")) : "Chưa xác định";
+            var weaknessesText = weaknesses.Any() ? string.Join("\n", weaknesses.Select(w => $"- {w.TopicName} ({w.AverageScore}/10)")) : "Chưa xác định";
 
             var aiRequest = new AIInsightRequest
             {
-                QuestionText = wrongAnswer.Question.QuestionText ?? "",
-                StudentAnswer = wrongAnswer.AnswerText ?? "",
-                CorrectAnswer = wrongAnswer.Question.CorrectAnswer ?? ""
+                QuestionText = $"PHÂN TÍCH NĂNG LỰC TOÁN HỌC:\n\n🌟 ĐIỂM MẠNH:\n{strengthsText}\n\n⚠️ ĐIỂM YẾU:\n{weaknessesText}",
+                StudentAnswer = specificMistakeInfo,
+                CorrectAnswer = "Hãy phân tích cả điểm mạnh (để phát huy) và điểm yếu (để khắc phục) của học sinh.",
+                Type = "assessment"
             };
 
             return await _aiService.GenerateInsightStructuredAsync(aiRequest);
+        }
+
+        public async Task<AIInsightResponse?> GetAIRoadmapAsync(int studentId)
+        {
+            _logger.LogInformation("Generating personalized roadmap AI analysis for student {StudentId}", studentId);
+            
+            var weakTopics = await _dashboardRepo.GetWeakTopicsAsync(studentId, 5);
+            
+            if (weakTopics == null || !weakTopics.Any())
+            {
+                return new AIInsightResponse { 
+                    Summary = "Lộ trình hoàn hảo! Em đang đi đúng hướng, AI khuyên em nên bắt đầu các bài thi thử nâng cao.",
+                    ConceptsToReview = new List<string> { "Luyện đề nâng cao" },
+                    Status = "success" 
+                };
+            }
+
+            var weakTopicsSummary = string.Join("\n", weakTopics.Select(t => 
+                $"- {t.TopicName} ({t.ChapterName}). Bài học: {string.Join(", ", t.LessonNames)}"));
+
+            var aiRequest = new AIInsightRequest
+            {
+                QuestionText = weakTopicsSummary,
+                StudentAnswer = "Thiết lập lộ trình học tập",
+                CorrectAnswer = "N/A",
+                Type = "roadmap"
+            };
+
+            var result = await _aiService.GenerateInsightStructuredAsync(aiRequest);
+            if (result != null && weakTopics.Any())
+            {
+                result.LessonId = weakTopics.First().FirstLessonId;
+            }
+            return result;
         }
 
         private DateTime GetWeekStart(DateTime date)

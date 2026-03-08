@@ -1,4 +1,4 @@
-﻿using ELearning_ToanHocHay_Control.Data.Entities;
+using ELearning_ToanHocHay_Control.Data.Entities;
 using ELearning_ToanHocHay_Control.Models.DTOs;
 using ELearning_ToanHocHay_Control.Models.DTOs.Subscription;
 using ELearning_ToanHocHay_Control.Repositories.Interfaces;
@@ -97,48 +97,20 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
     {
         public static SubscriptionInfoDto BuildSubscriptionInfo(Subscription? activeSubscription)
         {
-            if (activeSubscription == null ||
-                activeSubscription.Status != SubscriptionStatus.Active ||
-                activeSubscription.EndDate < DateTime.UtcNow)
-            {
-                return new SubscriptionInfoDto
-                {
-                    PackageType = 0,
-                    PackageName = "Free",
-                    IsActive = false,
-                    AiHintLimitDaily = 0,
-                    UnlimitedAiHint = false
-                };
-            }
-
-            var pkg = activeSubscription.Package!;
-            var name = pkg.PackageName.ToLower().Trim();
-
-            // FIX: match đúng tên trong DB
-            // "Gói Premium"      → 2
-            // "Gói tiêu chuẩn"   → 1
-            // "Gói trải nghiệm"  → 0 (free, nhưng có subscription thì vẫn active)
-            int packageType = name switch
-            {
-                var n when n.Contains("premium") => 2,
-                var n when n.Contains("tiêu chuẩn") || n.Contains("standard") || n.Contains("tieu chuan") => 1,
-                var n when n.Contains("trải nghiệm") || n.Contains("trai nghiem") || n.Contains("free") => 0,
-                _ => 0
-            };
-
+            // [TEST MODE] Luôn trả về Premium để test
             return new SubscriptionInfoDto
             {
-                PackageType = packageType,
-                PackageName = pkg.PackageName,
+                PackageType = 2, // Premium
+                PackageName = "Gói Premium (Test Mode)",
                 IsActive = true,
-                EndDate = activeSubscription.EndDate,
-                DaysRemaining = (int)(activeSubscription.EndDate - DateTime.UtcNow).TotalDays,
-                UnlimitedAiHint = pkg.UnlimitedAiHint,
-                AiHintLimitDaily = pkg.AiHintLimitDaily,
-                PersonalizedPath = pkg.PersonalizedPath,
-                MistakeRetry = pkg.MistakeRetry,
-                SmartReminder = pkg.SmartReminder,
-                PrioritySupport = pkg.PrioritySupport
+                EndDate = DateTime.UtcNow.AddMonths(1),
+                DaysRemaining = 30,
+                UnlimitedAiHint = true,
+                AiHintLimitDaily = 99,
+                PersonalizedPath = true,
+                MistakeRetry = true,
+                SmartReminder = true,
+                PrioritySupport = true
             };
         }
     }

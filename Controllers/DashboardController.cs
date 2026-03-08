@@ -73,20 +73,26 @@ namespace ELearning_ToanHocHay_Control.Controllers
             return Ok(result);
         }
 
-        [HttpGet("ai-insights")]
-        public async Task<IActionResult> GetAIInsights(int studentId)
+        [HttpGet("ai-assessment")]
+        public async Task<IActionResult> GetAIAssessment(int studentId)
         {
             var package = await _coreDashboardService.GetPackageTypeAsync(studentId);
-
             if (package < PackageType.Premium)
                 return StatusCode(403, new { message = "Tính năng này chỉ dành cho tài khoản Premium." });
 
             var result = await _coreDashboardService.GetAIInsightAsync(studentId);
+            return result != null ? Ok(result) : NotFound(new { message = "Chưa có dữ liệu để phân tích." });
+        }
 
-            if (result == null)
-                return NotFound(new { message = "Chưa có dữ liệu để phân tích." });
+        [HttpGet("ai-roadmap")]
+        public async Task<IActionResult> GetAIRoadmap(int studentId)
+        {
+            var package = await _coreDashboardService.GetPackageTypeAsync(studentId);
+            if (package < PackageType.Premium)
+                return StatusCode(403, new { message = "Tính năng này chỉ dành cho tài khoản Premium." });
 
-            return Ok(result);
+            var result = await _coreDashboardService.GetAIRoadmapAsync(studentId);
+            return result != null ? Ok(result) : NotFound(new { message = "Chưa có dữ liệu để phân tích lộ trình." });
         }
     }
 }

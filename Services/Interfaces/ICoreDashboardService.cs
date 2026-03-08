@@ -10,5 +10,6 @@ namespace ELearning_ToanHocHay_Control.Services.Interfaces
         Task<List<ChapterScoreComparisonDto>> GetChapterScoreComparisonAsync(int studentId);
         Task<PackageType> GetPackageTypeAsync(int studentId);
         Task<AIInsightResponse?> GetAIInsightAsync(int studentId);
+        Task<AIInsightResponse?> GetAIRoadmapAsync(int studentId);
     }
 }
