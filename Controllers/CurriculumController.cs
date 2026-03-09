@@ -46,6 +46,14 @@ namespace ELearning_ToanHocHay_Control.Controllers
             return Ok(result);
         }
 
+        [HttpGet("full-tree")]
+        //[AllowAnonymous]
+        public async Task<IActionResult> GetFullTree()
+        {
+            var result = await _curriculumService.GetAllAsync();
+            return Ok(result);
+        }
+
         // ===================== GET BY ID =====================
         [HttpGet("{id:int}")]
         //[AllowAnonymous]

@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using ELearning_ToanHocHay_Control.Services.Interfaces;
 using System.Text.Json.Serialization;
+using System.Text.Encodings.Web;
 using ELearning_ToanHocHay_Control.Models.DTOs.Chatbot;
 using ELearning_ToanHocHay_Control.Models.DTOs.AI;
 
@@ -26,6 +27,40 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
             _httpClient.Timeout = TimeSpan.FromSeconds(60);
         }
 
+        private JsonSerializerOptions GetJsonOptions()
+        {
+            return new JsonSerializerOptions 
+            { 
+                PropertyNameCaseInsensitive = true,
+                Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+                ReadCommentHandling = JsonCommentHandling.Skip
+            };
+        }
+
+        private async Task<HttpResponseMessage> PostWithRetryAsync(string endpoint, string jsonContent)
+        {
+            int maxRetries = 3;
+            for (int i = 0; i < maxRetries; i++)
+            {
+                var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+                var response = await _httpClient.PostAsync(endpoint, content);
+                if (response.IsSuccessStatusCode)
+                {
+                    return response;
+                }
+                if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests || (int)response.StatusCode == 429) 
+                {
+                    if (i == maxRetries - 1) return response;
+                    var delay = Math.Pow(2, i) * 1000;
+                    _logger.LogWarning($"Rate limit hit (429). Retrying in {delay}ms...");
+                    await Task.Delay((int)delay);
+                    continue;
+                }
+                return response;
+            }
+            return new HttpResponseMessage(System.Net.HttpStatusCode.InternalServerError);
+        }
+
         // ==================== HINT GENERATION ====================
         public async Task<string> GenerateHintAsync(string prompt)
         {
@@ -45,9 +80,7 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
             try
             {
                 var jsonContent = JsonSerializer.Serialize(request);
-                var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
-
-                var response = await _httpClient.PostAsync("/api/hint", content);
+                var response = await PostWithRetryAsync("/api/hint", jsonContent);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -57,8 +90,7 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
                 }
 
                 var responseContent = await response.Content.ReadAsStringAsync();
-                return JsonSerializer.Deserialize<AIHintResponse>(responseContent,
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                return JsonSerializer.Deserialize<AIHintResponse>(responseContent, GetJsonOptions());
             }
             catch (Exception ex)
             {
@@ -72,9 +104,7 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
             try
             {
                 var jsonContent = JsonSerializer.Serialize(request);
-                var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
-
-                var response = await _httpClient.PostAsync("/api/feedback", content);
+                var response = await PostWithRetryAsync("/api/feedback", jsonContent);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -84,8 +114,7 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
                 }
 
                 var responseContent = await response.Content.ReadAsStringAsync();
-                return JsonSerializer.Deserialize<AIFeedbackResponse>(responseContent,
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                return JsonSerializer.Deserialize<AIFeedbackResponse>(responseContent, GetJsonOptions());
             }
             catch (Exception ex)
             {
@@ -99,9 +128,7 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
             try
             {
                 var jsonContent = JsonSerializer.Serialize(request);
-                var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
-
-                var response = await _httpClient.PostAsync("/api/ai-insights", content);
+                var response = await PostWithRetryAsync("/api/ai-insights", jsonContent);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -111,8 +138,7 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
                 }
 
                 var responseContent = await response.Content.ReadAsStringAsync();
-                return JsonSerializer.Deserialize<AIInsightResponse>(responseContent,
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                return JsonSerializer.Deserialize<AIInsightResponse>(responseContent, GetJsonOptions());
             }
             catch (Exception ex)
             {
@@ -164,14 +190,12 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
             try
             {
                 var jsonContent = JsonSerializer.Serialize(request);
-                var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
-                var response = await _httpClient.PostAsync(endpoint, content);
+                var response = await PostWithRetryAsync(endpoint, jsonContent);
 
                 if (!response.IsSuccessStatusCode) return null;
 
                 var responseString = await response.Content.ReadAsStringAsync();
-                return JsonSerializer.Deserialize<ChatbotResponse>(responseString,
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                return JsonSerializer.Deserialize<ChatbotResponse>(responseString, GetJsonOptions());
             }
             catch { return null; }
         }
