@@ -1,4 +1,5 @@
 ﻿using ELearning_ToanHocHay_Control.Data.Entities;
+using ELearning_ToanHocHay_Control.Models.DTOs;
 
 namespace ELearning_ToanHocHay_Control.Repositories.Interfaces
 {

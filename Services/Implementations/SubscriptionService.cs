@@ -90,6 +90,46 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
             var activeSubscription = await _packageRepository.GetActivePackageAsync(studentId);
             return SubscriptionInfoHelper.BuildSubscriptionInfo(activeSubscription);
         }
+
+        // Services/Implementations/SubscriptionService.cs — thêm method
+        public async Task<ApiResponse<bool>> UpdateStatusAsync(int id, SubscriptionStatus newStatus)
+        {
+            var sub = await _repository.GetByIdAsync(id);
+            if (sub == null)
+                return ApiResponse<bool>.ErrorResponse("Subscription không tồn tại");
+
+            // ── Validate chuyển trạng thái hợp lệ ──────────────────────────────
+            var allowed = new Dictionary<SubscriptionStatus, SubscriptionStatus[]>
+            {
+                [SubscriptionStatus.Pending] = [SubscriptionStatus.Active, SubscriptionStatus.Cancelled, SubscriptionStatus.Expired],
+                [SubscriptionStatus.Active] = [SubscriptionStatus.Expired, SubscriptionStatus.Cancelled],
+                [SubscriptionStatus.Expired] = [],   // trạng thái cuối
+                [SubscriptionStatus.Cancelled] = [],   // trạng thái cuối
+            };
+
+            if (!allowed[sub.Status].Contains(newStatus))
+                return ApiResponse<bool>.ErrorResponse(
+                    $"Không thể chuyển từ '{sub.Status}' sang '{newStatus}'");
+
+            // ── Cập nhật ────────────────────────────────────────────────────────
+            sub.Status = newStatus;
+
+            // Khi Active: ghi nhận ngày bắt đầu/kết thúc
+            if (newStatus == SubscriptionStatus.Active)
+            {
+                sub.StartDate = DateTime.UtcNow;
+                sub.EndDate = DateTime.UtcNow.AddMonths(1);
+
+                if (sub.Payment != null)
+                {
+                    sub.Payment.Status = PaymentStatus.Completed;
+                    sub.Payment.PaymentDate = DateTime.UtcNow;
+                }
+            }
+
+            await _repository.UpdateAsync(sub);
+            return ApiResponse<bool>.SuccessResponse(true, $"Cập nhật trạng thái thành '{newStatus}' thành công");
+        }
     }
 
     // ── Tách ra ngoài class, cùng namespace ──────────────────────────────────

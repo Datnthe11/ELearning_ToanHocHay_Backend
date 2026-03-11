@@ -1,10 +1,13 @@
 ﻿using ELearning_ToanHocHay_Control.Common;
+using ELearning_ToanHocHay_Control.Data.Entities;
 using ELearning_ToanHocHay_Control.Models.DTOs.Subscription;
 using ELearning_ToanHocHay_Control.Services.Implementations;
 using ELearning_ToanHocHay_Control.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
+using SendGrid;
 
 namespace ELearning_ToanHocHay_Control.Controllers
 {
@@ -98,16 +101,31 @@ namespace ELearning_ToanHocHay_Control.Controllers
         [HttpGet("status/{id}")]
         public async Task<IActionResult> GetStatus(int id)
         {
-            var subscription = await _service.GetByIdAsync(id);
-
-            if (subscription == null || subscription.Data == null)
+            var response = await _service.GetByIdAsync(id);
+            if (response == null || response.Data == null)
                 return NotFound();
 
+            var sub = response.Data;
             return Ok(new
             {
-                status = subscription.Data.Status.ToString()
+                status = sub.Status.ToString(),   // "Active" / "Pending" / "Expired" / "Cancelled"
+                endDate = sub.Status == SubscriptionStatus.Active
+                            ? sub.EndDate.ToString("dd/MM/yyyy")
+                            : (string?)null
             });
         }
 
+        /// <summary>
+        /// PATCH api/subscription/{id}/status
+        /// Body: { "status": "Active" | "Expired" | "Cancelled" }
+        /// </summary>
+        [HttpPatch("{id:int}/status")]
+        public async Task<IActionResult> UpdateStatus(int id, [FromBody] UpdateSubscriptionStatusDto dto)
+        {
+            var response = await _service.UpdateStatusAsync(id, dto.Status);
+            if (!response.Success)
+                return BadRequest(response);
+            return Ok(response);
+        }
     }
 }
