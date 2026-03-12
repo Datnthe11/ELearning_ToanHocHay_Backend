@@ -46,13 +46,14 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
 
         public async Task<CoreDashboardDto> GetCoreDashboardAsync(int studentId)
         {
-            _logger.LogInformation("Building core dashboard for student {StudentId}", studentId);
-
             var studentInfoTask = await GetStudentInfoAsync(studentId);
             var statsTask = await GetOverviewStatsAsync(studentId);
             var recentLessonsTask = await GetRecentLessonsAsync(studentId, 5);
             var chapterProgressTask = await GetChapterProgressSummaryAsync(studentId);
             var packageTypeTask = await GetPackageTypeAsync(studentId);
+
+            // ✅ THÊM DÒNG NÀY
+            var subscription = await _packageRepo.GetActivePackageAsync(studentId);
 
             var dashboard = new CoreDashboardDto
             {
@@ -61,7 +62,8 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
                 RecentLessons = recentLessonsTask,
                 ChapterProgress = chapterProgressTask,
                 PackageType = packageTypeTask,
-                SubscriptionInfo = SubscriptionInfoHelper.BuildSubscriptionInfo(null),
+                // ✅ SỬA DÒNG NÀY — truyền subscription thật thay vì null
+                SubscriptionInfo = SubscriptionInfoHelper.BuildSubscriptionInfo(subscription),
                 Links = GenerateDashboardLinks(studentId, packageTypeTask)
             };
 
