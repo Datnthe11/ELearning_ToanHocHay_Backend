@@ -20,6 +20,7 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
         private readonly IStudentParentRepository _studentParentRepo;
         private readonly IParentRepository _parentRepo;
         private readonly IMapper _mapper;
+        private readonly SubscriptionInfoHelper _subscriptionInfoHelper;
         private readonly ILogger<CoreDashboardService> _logger;
 
         public CoreDashboardService(
@@ -63,7 +64,7 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
                 ChapterProgress = chapterProgressTask,
                 PackageType = packageTypeTask,
                 // ✅ SỬA DÒNG NÀY — truyền subscription thật thay vì null
-                SubscriptionInfo = SubscriptionInfoHelper.BuildSubscriptionInfo(subscription),
+                SubscriptionInfo = await _subscriptionInfoHelper.BuildSubscriptionInfo(subscription),
                 Links = GenerateDashboardLinks(studentId, packageTypeTask)
             };
 

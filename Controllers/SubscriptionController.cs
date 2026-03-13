@@ -85,7 +85,7 @@ namespace ELearning_ToanHocHay_Control.Controllers
             var response = await _service.CheckPremiumAsync(studentId);
             return Ok(response);
         }
-        
+
         /*[HttpGet("/api/student/{studentId}/subscription/current")]
         [Authorize]
         public async Task<IActionResult> GetCurrentByStudent(int studentId)

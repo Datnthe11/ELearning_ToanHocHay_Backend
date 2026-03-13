@@ -126,8 +126,8 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
                     if (activeSub?.Package != null)
                     {
                         var name = activeSub.Package.PackageName.ToLower();
-                        packageType = name.Contains("premium") ? 2
-                                    : name.Contains("standard") ? 1
+                        packageType = name.Contains("premium") || name.Contains("Gói Premium") ? 2
+                                    : name.Contains("standard") || name.Contains("Gói tiêu chuẩn") ? 1
                                     : 0;
                     }
                 }

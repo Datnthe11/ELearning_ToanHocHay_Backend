@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using ELearning_ToanHocHay_Control.Data.Entities;
 using ELearning_ToanHocHay_Control.Models.DTOs;
 using ELearning_ToanHocHay_Control.Models.DTOs.Subscription;
@@ -11,6 +12,7 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
     {
         private readonly ISubscriptionRepository _repository;
         private readonly IPackageRepository _packageRepository;
+        private readonly SubscriptionInfoHelper _subscriptionInfoHelper;
 
         public SubscriptionService(
             ISubscriptionRepository repository,
@@ -18,6 +20,7 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
         {
             _repository = repository;
             _packageRepository = packageRepository;
+            _subscriptionInfoHelper = new SubscriptionInfoHelper(packageRepository);
         }
 
         public async Task<ApiResponse<IEnumerable<SubscriptionDto>>> GetAllAsync()
@@ -88,7 +91,7 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
         public async Task<SubscriptionInfoDto> GetActiveSubscriptionInfoAsync(int studentId)
         {
             var activeSubscription = await _packageRepository.GetActivePackageAsync(studentId);
-            return SubscriptionInfoHelper.BuildSubscriptionInfo(activeSubscription);
+            return await _subscriptionInfoHelper.BuildSubscriptionInfo(activeSubscription);
         }
 
         // Services/Implementations/SubscriptionService.cs — thêm method
@@ -133,24 +136,35 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
     }
 
     // ── Tách ra ngoài class, cùng namespace ──────────────────────────────────
-    public static class SubscriptionInfoHelper
+    public class SubscriptionInfoHelper
     {
-        public static SubscriptionInfoDto BuildSubscriptionInfo(Subscription? activeSubscription)
+        private readonly IPackageRepository _packageRepository;
+        public SubscriptionInfoHelper (IPackageRepository packageRepository)
         {
-            // [TEST MODE] Luôn trả về Premium để test
+            _packageRepository = packageRepository;
+        }
+        public async Task<SubscriptionInfoDto> BuildSubscriptionInfo(Subscription? activeSubscription)
+        {
+            var package = await _packageRepository.GetByIdAsync(activeSubscription.PackageId);
+            int packageType = 0; // FREE
+            if (package.PackageName == "Gói trải nghiệm") packageType = 1;
+            if (package.PackageName == "Gói tiêu chuẩn") packageType = 2;
+            if (package.PackageName == "Gói Premium") packageType = 3;
+
+            DateTime now = DateTime.Now;
             return new SubscriptionInfoDto
             {
-                PackageType = 2, // Premium
-                PackageName = "Gói Premium (Test Mode)",
-                IsActive = true,
-                EndDate = DateTime.UtcNow.AddMonths(1),
-                DaysRemaining = 30,
-                UnlimitedAiHint = true,
-                AiHintLimitDaily = 99,
-                PersonalizedPath = true,
-                MistakeRetry = true,
-                SmartReminder = true,
-                PrioritySupport = true
+                PackageType = packageType, // Premium
+                PackageName = package.PackageName,
+                IsActive = package.IsActive,
+                EndDate = activeSubscription.EndDate,
+                DaysRemaining = (activeSubscription.EndDate - now).Days,
+                UnlimitedAiHint = package.UnlimitedAiHint,
+                AiHintLimitDaily = package.AiHintLimitDaily != 0 ? package.AiHintLimitDaily : 99,
+                PersonalizedPath = package.PersonalizedPath,
+                MistakeRetry = package.MistakeRetry,
+                SmartReminder = package.SmartReminder,
+                PrioritySupport = package.PrioritySupport,
             };
         }
     }
