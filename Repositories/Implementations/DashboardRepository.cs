@@ -261,9 +261,7 @@ namespace ELearning_ToanHocHay_Control.Repositories.Implementations
                 a.MaxScore > 0 &&
                 a.Exercise != null &&
                 a.Exercise.Topic != null &&
-                a.Exercise.Topic.Chapter != null &&
-                (a.Exercise.ExerciseType == ExerciseType.Test ||
-                 a.Exercise.ExerciseType == ExerciseType.Exam)) // ← chỉ lấy Test + Exam
+                a.Exercise.Topic.Chapter != null) // bỏ filter ExerciseType
     .Include(a => a.Exercise)
         .ThenInclude(e => e.Topic)
             .ThenInclude(t => t.Chapter)
