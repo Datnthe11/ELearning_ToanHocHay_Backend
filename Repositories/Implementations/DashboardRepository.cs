@@ -247,7 +247,7 @@ namespace ELearning_ToanHocHay_Control.Repositories.Implementations
             return progressList;
         }
 
-        /// <summary>
+        
         /// Lấy điểm TB theo từng chương để vẽ biểu đồ
         /// FIX: Load về client trước rồi GroupBy để tránh crash navigation property null
         /// FIX: Thang điểm 10 thay vì không nhất quán
@@ -255,21 +255,22 @@ namespace ELearning_ToanHocHay_Control.Repositories.Implementations
         public async Task<List<ChapterScoreComparisonDto>> GetChapterComparisonAsync(int studentId)
         {
             var attempts = await _context.ExerciseAttempts
-    .AsNoTracking()
-    .Where(a => a.StudentId == studentId &&
-                a.Status != AttemptStatus.InProgress &&
-                a.MaxScore > 0 &&
-                a.Exercise != null &&
-                a.Exercise.Topic != null &&
-                a.Exercise.Topic.Chapter != null) // bỏ filter ExerciseType
-    .Include(a => a.Exercise)
-        .ThenInclude(e => e.Topic)
-            .ThenInclude(t => t.Chapter)
-    .ToListAsync();
+                .AsNoTracking()
+                .Where(a => a.StudentId == studentId &&
+                            a.Status != AttemptStatus.InProgress &&
+                            a.MaxScore > 0)
+                .Include(a => a.Exercise)
+                    .ThenInclude(e => e.Topic)
+                        .ThenInclude(t => t.Chapter)
+                .ToListAsync();
 
-            if (!attempts.Any()) return new List<ChapterScoreComparisonDto>();
+            // Filter null sau khi load về client
+            var valid = attempts.Where(a =>
+                a.Exercise?.Topic?.Chapter != null).ToList();
 
-            return attempts
+            if (!valid.Any()) return new List<ChapterScoreComparisonDto>();
+
+            return valid
                 .GroupBy(a => new
                 {
                     a.Exercise.Topic.Chapter.ChapterId,
