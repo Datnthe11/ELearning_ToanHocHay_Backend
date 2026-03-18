@@ -1,138 +1,120 @@
-# ELearning\_ToanHocHay\_API
+# ELearning ToanHocHay - Backend API
 
-This is API project for the system
+## 📌 Overview
 
+This project is a backend API for an e-learning math platform that supports students and parents in learning and tracking progress. The system integrates AI-powered features to enhance learning effectiveness and provide personalized recommendations.
 
+Built with **ASP.NET Core**, **Entity Framework Core**, and integrated **AI services**.
 
-#### **Cài Đặt**
+---
 
-1\. Cài Đặt NuGet Packages
+## 🚀 Key Features
 
-bashdotnet add package Microsoft.EntityFrameworkCore
+### 🔐 Authentication & Authorization
 
-dotnet add package Microsoft.EntityFrameworkCore.SqlServer
+* JWT-based authentication
+* Role-based access (Student, Parent)
 
-dotnet add package Microsoft.EntityFrameworkCore.Tools
+### 📚 Learning System
 
-dotnet add package Microsoft.AspNetCore.Authentication.JwtBearer
+* Course, chapter, topic, and lesson management
+* Exercise and question system
+* Student progress tracking
 
-dotnet add package System.IdentityModel.Tokens.Jwt
+### 🤖 AI-Powered Features (My Contribution)
 
-dotnet add package BCrypt.Net-Next
+* **AI Answer Hint Generation**: Suggests hints for students during practice
+* **AI Feedback System**: Provides explanations and feedback for incorrect answers
+* **Performance Analysis**: Analyzes student strengths and weaknesses based on test history
+* **Personalized Learning Path**: Recommends study roadmap based on performance
+* **AI Chatbot**: Supports students and parents with learning guidance
 
-dotnet add package Swashbuckle.AspNetCore
+### 💳 Payment & Subscription
 
-2\. Cấu Hình Connection String
+* Subscription management
+* Payment integration (SePay)
 
-Cập nhật appsettings.json:
+### 📊 Dashboard & Analytics
 
-json{
+* Learning progress tracking
+* Performance statistics
 
-&nbsp; "ConnectionStrings": {
+---
 
-&nbsp;   "DefaultConnection": "Server=YOUR\_SERVER;Database=ELearning\_ToanHocHay;User Id=YOUR\_USER;Password=YOUR\_PASSWORD;TrustServerCertificate=True;"
+## 🛠️ Tech Stack
 
-&nbsp; }
+* **Backend**: ASP.NET Core Web API
+* **Database**: PostgreSQL
+* **ORM**: Entity Framework Core
+* **Authentication**: JWT
+* **AI Integration**: Python services / external AI APIs
+* **Deployment**: Docker
 
-}
+---
 
-3\. Cấu Hình JWT Settings
+## ⚙️ Setup & Installation
 
-Trong appsettings.json, đảm bảo SecretKey có ít nhất 32 ký tự:
+### 1. Clone repository
 
-json{
+```bash
+git clone https://github.com/Datnthe11/ELearning_ToanHocHay_Backend.git
+cd ELearning_ToanHocHay_Backend
+```
 
-&nbsp; "JwtSettings": {
+### 2. Configure environment variables
 
-&nbsp;   "SecretKey": "YOUR\_SECRET\_KEY\_MINIMUM\_32\_CHARACTERS\_LONG\_FOR\_SECURITY",
+Create environment variables for:
 
-&nbsp;   "Issuer": "ELearning\_ToanHocHay",
+* Database connection string
+* JWT Secret Key
+* External API keys (if any)
 
-&nbsp;   "Audience": "ELearning\_ToanHocHay\_Users",
+Example:
 
-&nbsp;   "ExpirationMinutes": 1440
+```
+DATABASE_URL=your_database_url
+JwtSettings__SecretKey=your_secret_key
+```
 
-&nbsp; }
+### 3. Run migration
 
-}
-
-4\. Chạy Migration
-
-bashdotnet ef migrations add InitialCreate
-
+```bash
 dotnet ef database update
+```
 
+### 4. Run project
 
+```bash
+dotnet run
+```
 
-#### **Bảo Mật**
+---
 
-1\. Password Hashing
+## 🔐 Security Notice
 
+Sensitive information (e.g., database connection strings, JWT secret keys, API keys) has been removed and is managed via environment variables.
 
+---
 
-Sử dụng BCrypt để hash password
+## 👨‍💻 My Role
 
-Salt rounds: 10 (mặc định của BCrypt.Net)
+* Developed and integrated AI-driven features into the system
+* Designed AI services for:
 
+  * Answer suggestion
+  * Feedback generation
+  * Learning analytics
+  * Chatbot interaction
+* Collaborated with team members on backend architecture and API development
 
+---
 
-2\. JWT Token
+## 📌 Repository Purpose
 
+This repository is a personal copy of a team project for portfolio and learning purposes.
 
+---
 
-Token có thời gian hết hạn (mặc định: 24 giờ)
+## 📞 Contact
 
-Sử dụng HMAC-SHA256 để ký token
-
-Secret key phải được giữ bí mật và có độ dài tối thiểu 32 ký tự
-
-
-
-3\. HTTPS
-
-
-
-Luôn sử dụng HTTPS trong production
-
-Token chỉ nên được truyền qua HTTPS
-
-
-
-#### **Testing với Swagger**
-
-
-
-1. Chạy ứng dụng: dotnet run
-
-2\. Mở browser: https://localhost:5001/swagger
-
-3\. Test Login endpoint
-
-4\. Copy token từ response
-
-5\. Click "Authorize" button ở góc phải trên
-
-6\. Nhập: Bearer {token}
-
-7\. Test các protected endpoints
-
-
-
-#### **Lưu Ý Quan Trọng**
-
-
-
-Secret Key: Phải thay đổi và giữ bí mật trong production
-
-Connection String: Không commit vào source control
-
-Token Expiration: Cân nhắc thời gian hết hạn phù hợp với ứng dụng
-
-Refresh Token: Có thể implement thêm refresh token cho UX tốt hơn
-
-Rate Limiting: Nên implement rate limiting cho login endpoint
-
-Audit Logging: Log các hoạt động đăng nhập/đăng xuất
-
-
-
+Feel free to connect or reach out for collaboration opportunities.
