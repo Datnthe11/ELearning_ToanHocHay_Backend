@@ -30,6 +30,7 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
         private readonly IAIFeedbackService _aiFeedbackService;
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly AppDbContext _context;
+        private readonly IEmailService _emailService;
 
         public ExerciseAttemptService(
             IExerciseAttemptRepository attemptRepository,
@@ -42,7 +43,8 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
             IAIFeedbackService aiFeedbackService,
             IServiceScopeFactory scopeFactory,
             IMapper mapper,
-            AppDbContext context) // FIX: Thêm context vào đây
+            AppDbContext context,
+            IEmailService emailService)
         {
             _attemptRepository = attemptRepository;
             _exerciseRepository = exerciseRepository;
@@ -54,7 +56,8 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
             _aiFeedbackService = aiFeedbackService;
             _scopeFactory = scopeFactory;
             _mapper = mapper;
-            _context = context; // FIX: Gán giá trị để không bị Null
+            _context = context;
+            _emailService = emailService;
         }
 
         public async Task<ApiResponse<ExerciseResultDto>> CompleteExerciseAsync(CompleteExerciseDto dto)
@@ -918,6 +921,66 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
             catch (Exception ex)
             {
                 return ApiResponse<StudentDashboardDto>.ErrorResponse(ex.Message);
+            }
+        }
+        public async Task<ApiResponse<bool>> ReportTabSwitchAsync(int attemptId)
+        {
+            try
+            {
+                // Load attempt with Student → User and StudentParents → Parent → User
+                var attempt = await _context.ExerciseAttempts
+                    .Include(a => a.Exercise)
+                    .Include(a => a.Student)
+                        .ThenInclude(s => s.User)
+                    .Include(a => a.Student)
+                        .ThenInclude(s => s.StudentParents)
+                            .ThenInclude(sp => sp.Parent)
+                                .ThenInclude(p => p.User)
+                    .FirstOrDefaultAsync(a => a.AttemptId == attemptId);
+
+                if (attempt == null)
+                    return ApiResponse<bool>.ErrorResponse("Không tìm thấy lượt làm bài.");
+
+                if (attempt.Status != AttemptStatus.InProgress)
+                    return ApiResponse<bool>.ErrorResponse("Bài thi đã kết thúc.");
+
+                var studentName = attempt.Student?.User?.FullName ?? "Học sinh";
+                var exerciseName = attempt.Exercise?.ExerciseName ?? "Bài kiểm tra";
+                var switchedAt = DateTime.UtcNow;
+
+                // Lấy số lần chuyển tab từ cache trong memory (đơn giản: tăng counter qua meta)
+                // Tạm thời dùng fixed count = 1, frontend sẽ truyền lên nếu cần
+                var parents = attempt.Student?.StudentParents
+                    ?.Select(sp => sp.Parent)
+                    .Where(p => p?.User?.Email != null)
+                    .ToList() ?? new List<Parent>();
+
+                if (!parents.Any())
+                {
+                    // Không có phụ huynh liên kết — vẫn báo success
+                    return ApiResponse<bool>.SuccessResponse(true, "Không có phụ huynh liên kết.");
+                }
+
+                // Gửi email song song cho tất cả phụ huynh
+                var emailTasks = parents.Select(p =>
+                    _emailService.SendTabSwitchNotificationAsync(
+                        toEmail: p.User!.Email,
+                        parentName: p.User.FullName,
+                        studentName: studentName,
+                        exerciseName: exerciseName,
+                        switchedAt: switchedAt,
+                        switchCount: 1
+                    )
+                );
+
+                await Task.WhenAll(emailTasks);
+
+                return ApiResponse<bool>.SuccessResponse(true, "Đã gửi thông báo cho phụ huynh.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ReportTabSwitch Error] {ex.Message}");
+                return ApiResponse<bool>.ErrorResponse("Lỗi khi gửi thông báo: " + ex.Message);
             }
         }
     }
