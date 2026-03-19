@@ -150,39 +150,41 @@ namespace ELearning_ToanHocHay_Control.Repositories.Implementations
         public async Task<List<RecentLessonModel>> GetRecentLessonsAsync(int studentId, int limit)
         {
             var raw = await _context.ExerciseAttempts
-                .AsNoTracking()
-                .Where(a => a.StudentId == studentId &&
-                           a.Status != AttemptStatus.InProgress &&
-                           a.Exercise != null)
-                .Include(a => a.Exercise)
-                    .ThenInclude(e => e.Topic)
-                        .ThenInclude(t => t.Chapter)
-                .Include(a => a.Exercise)
-                    .ThenInclude(e => e.Topic)
-                        .ThenInclude(t => t.Lessons)
-                .OrderByDescending(a => a.SubmittedAt)
-                .Take(limit)
-                .ToListAsync();
+    .AsNoTracking()
+    .Where(a => a.StudentId == studentId &&
+               a.Status != AttemptStatus.InProgress &&
+               a.Exercise != null)
+    .Include(a => a.Exercise)
+        .ThenInclude(e => e.Topic)
+            .ThenInclude(t => t.Chapter)
+    .Include(a => a.Exercise)
+        .ThenInclude(e => e.Topic)
+            .ThenInclude(t => t.Lessons)
+    .OrderByDescending(a => a.SubmittedAt)
+    .Take(limit)
+    .ToListAsync();
 
             return raw
-                .Where(a => a.Exercise?.Topic != null)
-                .Select(a => new RecentLessonModel
-                {
-                    LessonId = a.Exercise.Topic.Lessons?.FirstOrDefault()?.LessonId ?? 0,
-                    LessonName = a.Exercise.Topic.Lessons?.FirstOrDefault()?.LessonName
-                                      ?? a.Exercise.Topic.TopicName,
-                    TopicName = a.Exercise.Topic.TopicName ?? "N/A",
-                    ChapterName = a.Exercise.Topic.Chapter?.ChapterName ?? "N/A",
-                    CompletedAt = a.SubmittedAt,
-                    DurationMinutes = a.SubmittedAt.HasValue
-                        ? (int)(a.SubmittedAt.Value - a.StartTime).TotalMinutes
-                        : 0,
-                    IsCompleted = true,
-                    ProgressPercentage = 100,
-                    Score = a.MaxScore > 0
-                        ? Math.Round((double)a.TotalScore / (double)a.MaxScore * 10.0, 1)
-                        : (double?)null  // ✅ FIX: thang 10 thay vì *100
-                }).ToList();
+    .Where(a => a.Exercise != null) // ← bỏ check Topic
+    .Select(a => new RecentLessonModel
+    {
+        LessonId = a.Exercise.Topic?.Lessons?.FirstOrDefault()?.LessonId ?? 0,
+        LessonName = a.Exercise.Topic?.Lessons?.FirstOrDefault()?.LessonName
+                          ?? a.Exercise.Topic?.TopicName
+                          ?? a.Exercise.ExerciseName, // ← fallback
+        TopicName = a.Exercise.Topic?.TopicName ?? a.Exercise.ExerciseName ?? "N/A",
+        ChapterName = a.Exercise.Topic?.Chapter?.ChapterName
+                   ?? a.Exercise.Chapter?.ChapterName ?? "N/A",
+        CompletedAt = a.SubmittedAt,
+        DurationMinutes = a.SubmittedAt.HasValue
+            ? (int)(a.SubmittedAt.Value - a.StartTime).TotalMinutes
+            : 0,
+        IsCompleted = true,
+        ProgressPercentage = 100,
+        Score = a.MaxScore > 0
+            ? Math.Round((double)a.TotalScore / (double)a.MaxScore * 10.0, 2) // ← 2 chữ số
+            : (double?)null
+    }).ToList();
         }
 
         /// <summary>
