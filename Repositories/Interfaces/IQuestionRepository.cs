@@ -1,4 +1,4 @@
-﻿using ELearning_ToanHocHay_Control.Data.Entities;
+using ELearning_ToanHocHay_Control.Data.Entities;
 
 namespace ELearning_ToanHocHay_Control.Repositories.Interfaces
 {
@@ -8,5 +8,6 @@ namespace ELearning_ToanHocHay_Control.Repositories.Interfaces
         Task<Question?> GetQuestionByIdAsync(int id);
 
         Task<Question> CreateAsync(Question question);
+        Task<List<Question>> CreateMultipleAsync(List<Question> questions);
     }
 }
