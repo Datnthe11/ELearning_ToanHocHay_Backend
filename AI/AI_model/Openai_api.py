@@ -64,10 +64,8 @@ class OpenAIAPIKeyManager:
 
 # Initialize API key manager
 api_key_manager = OpenAIAPIKeyManager()
-
-# NOTE: For OpenAI v1.0+, it's recommended to use a client instance.
-# But we'll keep it simple for legacy compatibility if possible, 
-# though the user is seeing errors with openai.error.
+# Global config for v1.x (falls back to default client)
+openai.api_key = api_key_manager.get_current_key()
 
 
 class OpenAIService:
@@ -392,19 +390,20 @@ class OpenAIService:
         """Call OpenAI API with retry logic on key rotation"""
         max_retries = len(api_key_manager.api_keys)
         # Import errors for v1.0+
-        from openai import RateLimitError, APIError, OpenAI
+        from openai import RateLimitError, APIError
         
         for attempt in range(max_retries):
             try:
-                # Use a fresh client with the current key
-                client = OpenAI(api_key=api_key_manager.get_current_key())
+                # Set global key for the default client
+                openai.api_key = api_key_manager.get_current_key()
                 
-                response = client.chat.completions.create(
+                # Using the global completions interface
+                response = openai.chat.completions.create(
                     model=self.model_name,
                     messages=messages,
                     temperature=0.7,
                     max_tokens=2000,
-                    response_format={"type": "json_object"}  # Force JSON response
+                    response_format={"type": "json_object"}
                 )
                 
                 response_text = response.choices[0].message.content

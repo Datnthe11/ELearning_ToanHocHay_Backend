@@ -54,8 +54,7 @@ class ChatbotLogicBackend:
     
     def _init_model(self):
         """Initialize OpenAI configuration"""
-        # OpenAI v1.0+ uses client instances, so we don't necessarily need a global key.
-        pass
+        openai.api_key = self.api_manager.get_current_key()
 
     def get_user(self, user_id: str) -> User:
         if user_id not in self.users:
@@ -145,11 +144,14 @@ class ChatbotLogicBackend:
     def _call_llm_with_retry(self, user: User, text: str) -> Dict:
         """Call LLM with retry logic on key rotation"""
         max_retries = len(self.api_manager.api_keys)
-        # Import OpenAI v1.0+ classes
-        from openai import OpenAI, RateLimitError, APIError
+        # Import OpenAI v1.0+ classes (excluding OpenAI client if it causes proxies issue)
+        from openai import RateLimitError, APIError
         
         for attempt in range(max_retries):
             try:
+                # Set global key
+                openai.api_key = self.api_manager.get_current_key()
+                
                 # Prompt cho LLM
                 system_prompt = (
                     "Bạn là trợ lý ảo thông minh của web toán học hay, khi người dùng hỏi hãy trả lời lịch sự. "
@@ -171,9 +173,8 @@ class ChatbotLogicBackend:
                     "Hãy trả lời với format JSON: {\"flow\": \"<flow_name>\", \"message\": \"<your_response>\"}"
                 )
                 
-                # Gọi OpenAI API (v1.0+)
-                client = OpenAI(api_key=self.api_manager.get_current_key())
-                response = client.chat.completions.create(
+                # Gọi OpenAI API (v1.0+) - using global completions
+                response = openai.chat.completions.create(
                     model=self.model_name,
                     messages=[
                         {"role": "system", "content": system_prompt},
