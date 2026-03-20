@@ -6,6 +6,7 @@ for key in ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"]:
         os.environ.pop(key)
 import json
 import logging
+import httpx
 from enum import Enum
 from typing import Dict
 from dotenv import load_dotenv
@@ -59,7 +60,11 @@ class ChatbotLogicBackend:
     def _init_model(self):
         """Initialize OpenAI configuration"""
         from openai import OpenAI
-        self.client = OpenAI(api_key=self.api_manager.get_current_key())
+        # Inject an explicit httpx client to bypass the internal 'proxies' error
+        self.client = OpenAI(
+            api_key=self.api_manager.get_current_key(),
+            http_client=httpx.Client()
+        )
 
     def get_user(self, user_id: str) -> User:
         if user_id not in self.users:

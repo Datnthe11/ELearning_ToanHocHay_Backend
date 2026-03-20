@@ -9,6 +9,7 @@ for key in ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"]:
 from dotenv import load_dotenv
 import sys
 import requests
+import httpx
 from PIL import Image
 from io import BytesIO
 import logging
@@ -76,8 +77,11 @@ class OpenAIService:
     def __init__(self, model_name: str = "gpt-4o-mini"):
         self.model_name = model_name
         from openai import OpenAI
-        # Initialize client instance
-        self.client = OpenAI(api_key=api_key_manager.get_current_key())
+        # Inject an explicit httpx client to bypass the internal 'proxies' error
+        self.client = OpenAI(
+            api_key=api_key_manager.get_current_key(),
+            http_client=httpx.Client()
+        )
     
     # ==================== HINT GENERATION ====================
     def generate_hint(
