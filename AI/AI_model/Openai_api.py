@@ -68,8 +68,6 @@ class OpenAIAPIKeyManager:
 
 # Initialize API key manager
 api_key_manager = OpenAIAPIKeyManager()
-# Global config for v1.x (falls back to default client)
-openai.api_key = api_key_manager.get_current_key()
 
 
 class OpenAIService:
@@ -77,6 +75,9 @@ class OpenAIService:
     
     def __init__(self, model_name: str = "gpt-4o-mini"):
         self.model_name = model_name
+        from openai import OpenAI
+        # Initialize client instance
+        self.client = OpenAI(api_key=api_key_manager.get_current_key())
     
     # ==================== HINT GENERATION ====================
     def generate_hint(
@@ -398,11 +399,11 @@ class OpenAIService:
         
         for attempt in range(max_retries):
             try:
-                # Set global key for the default client
-                openai.api_key = api_key_manager.get_current_key()
+                # Update key for the client instance
+                self.client.api_key = api_key_manager.get_current_key()
                 
-                # Using the global completions interface
-                response = openai.chat.completions.create(
+                # Using the client-based completions interface
+                response = self.client.chat.completions.create(
                     model=self.model_name,
                     messages=messages,
                     temperature=0.7,

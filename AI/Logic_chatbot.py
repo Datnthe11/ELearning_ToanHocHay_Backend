@@ -58,7 +58,8 @@ class ChatbotLogicBackend:
     
     def _init_model(self):
         """Initialize OpenAI configuration"""
-        openai.api_key = self.api_manager.get_current_key()
+        from openai import OpenAI
+        self.client = OpenAI(api_key=self.api_manager.get_current_key())
 
     def get_user(self, user_id: str) -> User:
         if user_id not in self.users:
@@ -153,8 +154,8 @@ class ChatbotLogicBackend:
         
         for attempt in range(max_retries):
             try:
-                # Set global key
-                openai.api_key = self.api_manager.get_current_key()
+                # Update key for the client instance
+                self.client.api_key = self.api_manager.get_current_key()
                 
                 # Prompt cho LLM
                 system_prompt = (
@@ -177,8 +178,8 @@ class ChatbotLogicBackend:
                     "Hãy trả lời với format JSON: {\"flow\": \"<flow_name>\", \"message\": \"<your_response>\"}"
                 )
                 
-                # Gọi OpenAI API (v1.0+) - using global completions
-                response = openai.chat.completions.create(
+                # Gọi OpenAI API (v1.0+) - using client completions
+                response = self.client.chat.completions.create(
                     model=self.model_name,
                     messages=[
                         {"role": "system", "content": system_prompt},
