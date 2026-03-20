@@ -1,5 +1,9 @@
 import openai
 import os
+# Clean up proxy environment variables that cause issues with OpenAI v1.x
+for key in ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"]:
+    if key in os.environ:
+        os.environ.pop(key)
 import json
 import logging
 from enum import Enum

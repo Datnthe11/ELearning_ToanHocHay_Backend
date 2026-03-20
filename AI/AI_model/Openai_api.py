@@ -2,6 +2,10 @@ import openai
 import json
 from typing import Dict, List, Optional, Any
 import os
+# Clean up proxy environment variables that cause issues with OpenAI v1.x
+for key in ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"]:
+    if key in os.environ:
+        os.environ.pop(key)
 from dotenv import load_dotenv
 import sys
 import requests
