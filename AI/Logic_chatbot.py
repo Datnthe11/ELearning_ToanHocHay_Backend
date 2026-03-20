@@ -54,7 +54,8 @@ class ChatbotLogicBackend:
     
     def _init_model(self):
         """Initialize OpenAI configuration"""
-        openai.api_key = self.api_manager.get_current_key()
+        # OpenAI v1.0+ uses client instances, so we don't necessarily need a global key.
+        pass
 
     def get_user(self, user_id: str) -> User:
         if user_id not in self.users:
@@ -144,6 +145,8 @@ class ChatbotLogicBackend:
     def _call_llm_with_retry(self, user: User, text: str) -> Dict:
         """Call LLM with retry logic on key rotation"""
         max_retries = len(self.api_manager.api_keys)
+        # Import OpenAI v1.0+ classes
+        from openai import OpenAI, RateLimitError, APIError
         
         for attempt in range(max_retries):
             try:
@@ -168,8 +171,9 @@ class ChatbotLogicBackend:
                     "Hãy trả lời với format JSON: {\"flow\": \"<flow_name>\", \"message\": \"<your_response>\"}"
                 )
                 
-                # Gọi OpenAI API
-                response = openai.ChatCompletion.create(
+                # Gọi OpenAI API (v1.0+)
+                client = OpenAI(api_key=self.api_manager.get_current_key())
+                response = client.chat.completions.create(
                     model=self.model_name,
                     messages=[
                         {"role": "system", "content": system_prompt},
@@ -219,17 +223,16 @@ class ChatbotLogicBackend:
                 
                 return result_flow
                 
-            except Exception as e:
-                logger.error(f"API call attempt {attempt + 1} failed: {str(e)}")
-                
+            except (RateLimitError, APIError) as e:
+                logger.error(f"API key error on attempt {attempt + 1}: {str(e)}")
                 if attempt < max_retries - 1:
-                    # Rotate API key and reconfigure
-                    new_key = self.api_manager.rotate_key()
-                    openai.api_key = new_key
+                    self.api_manager.rotate_key()
                     logger.info(f"Retrying with next API key...")
                 else:
-                    logger.error(f"Max retries ({max_retries}) exceeded")
                     return self._flow_fallback(user)
+            except Exception as e:
+                logger.error(f"Unexpected error on attempt {attempt + 1}: {str(e)}")
+                return self._flow_fallback(user)
         
         return self._flow_fallback(user)
 

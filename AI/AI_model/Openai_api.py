@@ -64,7 +64,10 @@ class OpenAIAPIKeyManager:
 
 # Initialize API key manager
 api_key_manager = OpenAIAPIKeyManager()
-openai.api_key = api_key_manager.get_current_key()
+
+# NOTE: For OpenAI v1.0+, it's recommended to use a client instance.
+# But we'll keep it simple for legacy compatibility if possible, 
+# though the user is seeing errors with openai.error.
 
 
 class OpenAIService:
@@ -388,10 +391,15 @@ class OpenAIService:
     def _call_api_with_retry(self, messages: List[Dict]) -> Dict:
         """Call OpenAI API with retry logic on key rotation"""
         max_retries = len(api_key_manager.api_keys)
+        # Import errors for v1.0+
+        from openai import RateLimitError, APIError, OpenAI
         
         for attempt in range(max_retries):
             try:
-                response = openai.ChatCompletion.create(
+                # Use a fresh client with the current key
+                client = OpenAI(api_key=api_key_manager.get_current_key())
+                
+                response = client.chat.completions.create(
                     model=self.model_name,
                     messages=messages,
                     temperature=0.7,
@@ -406,13 +414,12 @@ class OpenAIService:
                     "Status": "success"
                 }
             
-            except openai.error.RateLimitError as e:
+            except RateLimitError as e:
                 logger.error(f"Rate limit hit on attempt {attempt + 1}: {str(e)}")
                 
                 if attempt < max_retries - 1:
                     # Rotate API key on rate limit
-                    new_key = api_key_manager.rotate_key()
-                    openai.api_key = new_key
+                    api_key_manager.rotate_key()
                 else:
                     return {
                         "text": f"API Rate Limit after {max_retries} attempts: {str(e)}",
@@ -420,12 +427,11 @@ class OpenAIService:
                         "Error": str(e)
                     }
             
-            except openai.error.APIError as e:
+            except APIError as e:
                 logger.error(f"API error on attempt {attempt + 1}: {str(e)}")
                 
                 if attempt < max_retries - 1:
-                    new_key = api_key_manager.rotate_key()
-                    openai.api_key = new_key
+                    api_key_manager.rotate_key()
                 else:
                     return {
                         "text": f"API Error after {max_retries} attempts: {str(e)}",
@@ -437,8 +443,7 @@ class OpenAIService:
                 logger.error(f"Unexpected error on attempt {attempt + 1}: {str(e)}")
                 
                 if attempt < max_retries - 1:
-                    new_key = api_key_manager.rotate_key()
-                    openai.api_key = new_key
+                    api_key_manager.rotate_key()
                 else:
                     return {
                         "text": f"Error after {max_retries} attempts: {str(e)}",
