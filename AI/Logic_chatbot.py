@@ -1,26 +1,24 @@
-import logging
+import openai
 import os
 import json
+import logging
 from enum import Enum
 from typing import Dict
 from dotenv import load_dotenv
-import google.generativeai as genai
 
 # Load environment variables
 load_dotenv()
 
-# Disable logging
 # Bật logging để debug
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
-# logger.disabled = True # Enable logger for debugging
 
 try:
-    from Config_manager import api_key_manager
+    from AI_model.Openai_api import api_key_manager
 except ImportError:
     import sys
     sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-    from Config_manager import api_key_manager
+    from AI_model.Openai_api import api_key_manager
 
 
 # ==================== USER STATE ====================
@@ -51,13 +49,12 @@ class ChatbotLogicBackend:
     def __init__(self):
         self.users: Dict[str, User] = {}
         self.api_manager = api_key_manager
-        self.api_manager.configure()
-        self.model_name = "gemini-2.5-flash"
+        self.model_name = "gpt-4o-mini"
         self._init_model()
     
     def _init_model(self):
-        """Initialize Gemini model"""
-        self.model = genai.GenerativeModel(self.model_name)
+        """Initialize OpenAI configuration"""
+        openai.api_key = self.api_manager.get_current_key()
 
     def get_user(self, user_id: str) -> User:
         if user_id not in self.users:
@@ -171,22 +168,23 @@ class ChatbotLogicBackend:
                     "Hãy trả lời với format JSON: {\"flow\": \"<flow_name>\", \"message\": \"<your_response>\"}"
                 )
                 
-                prompt = f"{system_prompt}\n\nUser message: {text}"
+                # Gọi OpenAI API
+                response = openai.ChatCompletion.create(
+                    model=self.model_name,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": text}
+                    ],
+                    temperature=0.5,
+                    max_tokens=2000,
+                    response_format={"type": "json_object"}
+                )
                 
-                # Gọi Gemini API
-                response = self.model.generate_content(prompt)
-                response_text = response.text.strip()
+                response_text = response.choices[0].message.content.strip()
                 logger.info(f"LLM response: {response_text}")
                 
-                # Thử parse JSON response (remove markdown backticks nếu có)
+                # Thử parse JSON response
                 try:
-                    # Remove markdown code block markers
-                    if response_text.startswith("```"):
-                        response_text = response_text.split("```")[1]
-                        if response_text.startswith("json"):
-                            response_text = response_text[4:]
-                        response_text = response_text.strip()
-                    
                     result = json.loads(response_text)
                     flow_name = result.get("flow", "fallback")
                     message = result.get("message", "")
@@ -210,16 +208,16 @@ class ChatbotLogicBackend:
                 }
                 
                 handler = flow_handlers.get(flow_name, self._flow_fallback)
-                result = handler(user)
+                result_flow = handler(user)
                 
                 # Thêm LLM message vào response nếu có (chỉ khi không phải fallback)
                 if message and flow_name != "fallback":
-                    if result.get("type") == "quick_reply":
-                        result["message"] = message + "\n" + result.get("message", "")
+                    if result_flow.get("type") == "quick_reply":
+                        result_flow["message"] = message + "\n" + result_flow.get("message", "")
                     else:
-                        result["message"] = message
+                        result_flow["message"] = message
                 
-                return result
+                return result_flow
                 
             except Exception as e:
                 logger.error(f"API call attempt {attempt + 1} failed: {str(e)}")
@@ -227,9 +225,7 @@ class ChatbotLogicBackend:
                 if attempt < max_retries - 1:
                     # Rotate API key and reconfigure
                     new_key = self.api_manager.rotate_key()
-                    self.api_manager.configure()
-                    # Recreate model with new API key
-                    self._init_model()
+                    openai.api_key = new_key
                     logger.info(f"Retrying with next API key...")
                 else:
                     logger.error(f"Max retries ({max_retries}) exceeded")

@@ -41,5 +41,6 @@ services:
       - .env
       - AI/.env
 
+
 volumes:
   pgdata:
