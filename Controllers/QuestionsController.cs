@@ -1,4 +1,4 @@
-﻿using ELearning_ToanHocHay_Control.Models.DTOs.Question;
+using ELearning_ToanHocHay_Control.Models.DTOs.Question;
 using ELearning_ToanHocHay_Control.Services.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
@@ -17,12 +17,12 @@ namespace ELearning_ToanHocHay_Control.Controllers
 
         // API: POST /api/Questions
         [HttpPost]
-        public async Task<IActionResult> Create([FromBody] CreateQuestionDto request)
+        public async Task<IActionResult> Create([FromBody] List<CreateQuestionDto> requests)
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            var result = await _questionService.CreateQuestionAsync(request);
+            var result = await _questionService.CreateQuestionsAsync(requests);
 
             if (result.Success)
             {

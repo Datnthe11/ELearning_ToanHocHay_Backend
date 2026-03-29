@@ -133,7 +133,9 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
                 DurationMinutes = l.DurationMinutes,
                 IsCompleted = l.IsCompleted,
                 ProgressPercentage = l.ProgressPercentage,
-                Score = l.Score
+                Score = l.Score,
+                AttemptId = l.AttemptId,
+                TabSwitchCount = l.TabSwitchCount
             }).ToList();
         }
 

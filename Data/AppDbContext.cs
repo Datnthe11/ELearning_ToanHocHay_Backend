@@ -1,4 +1,4 @@
-﻿using ELearning_ToanHocHay_Control.Data.Entities;
+using ELearning_ToanHocHay_Control.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace ELearning_ToanHocHay_Control.Data
@@ -46,6 +46,7 @@ namespace ELearning_ToanHocHay_Control.Data
         public DbSet<AuditLog> AuditLogs { get; set; }
         public DbSet<SystemConfig> SystemConfigs { get; set; }
         public DbSet<LessonProgress> LessonProgresses { get; set; }
+        public DbSet<TabSwitchLog> TabSwitchLogs { get; set; }
 
         #endregion
 
@@ -450,6 +451,14 @@ namespace ELearning_ToanHocHay_Control.Data
                 entity.HasOne(lp => lp.Student)
                       .WithMany(s => s.LearningPaths)
                       .HasForeignKey(lp => lp.StudentId)
+                      .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<TabSwitchLog>(entity =>
+            {
+                entity.HasOne(t => t.Attempt)
+                      .WithMany()
+                      .HasForeignKey(t => t.AttemptId)
                       .OnDelete(DeleteBehavior.Cascade);
             });
         }

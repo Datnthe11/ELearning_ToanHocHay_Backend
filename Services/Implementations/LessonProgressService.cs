@@ -28,9 +28,7 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
             var progress = await _context.LessonProgresses
                 .FirstOrDefaultAsync(x => x.StudentId == studentId && x.LessonId == lessonId);
 
-            int durationSeconds = lesson.DurationMinutes * 60 ?? 0;
-
-            bool isCompleted = watchTime >= durationSeconds * 0.8;
+            bool isCompleted = true;
 
             if (progress == null)
             {

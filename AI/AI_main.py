@@ -1,4 +1,4 @@
-﻿from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, request, jsonify, render_template_string
 from flask_cors import CORS
 import logging
 import sys
@@ -10,12 +10,12 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 sys.path.append(os.path.join(os.path.dirname(__file__), 'AI_model'))
-from AI_model.Gemini_api import GeminiAIService
+from AI_model.Openai_api import OpenAIService
 
 app = Flask(__name__)
 CORS(app)
 
-gemini_service = GeminiAIService()
+openai_service = OpenAIService()
 
 # ==================== VALIDATION ====================
 def validate_hint_request(data: Dict[str, Any]) -> tuple[bool, str]:
@@ -57,7 +57,7 @@ def generate_hint():
         question_image_url = data.get('question_image_url')
         options = data.get('options')
 
-        result = gemini_service.generate_hint(
+        result = openai_service.generate_hint(
             question_text=question_text,
             question_type=question_type,
             difficulty_level=difficulty_level,
@@ -85,7 +85,7 @@ def generate_hints_batch():
     results = []
     for idx, hint in enumerate(data['hints']):
         try:
-            result = gemini_service.generate_hint(
+            result = openai_service.generate_hint(
                 question_text=hint.get('question_text'),
                 question_type=hint.get('question_type'),
                 difficulty_level=hint.get('difficulty_level'),
@@ -124,7 +124,7 @@ def generate_feedback():
         attempt_id = data.get('attempt_id')
         options = data.get('options')
 
-        result = gemini_service.generate_feedback(
+        result = openai_service.generate_feedback(
             question_text=question_text,
             question_type=question_type,
             student_answer=student_answer,
@@ -150,7 +150,7 @@ def health():
 
 @app.route('/api/status')
 def status():
-    return jsonify({"service": "Gemini AI API", "status": "running"}), 200
+    return jsonify({"service": "OpenAI AI API", "status": "running"}), 200
 
 # ==================== DOCUMENTATION ====================
 @app.route('/docs', methods=['GET'])
@@ -176,8 +176,8 @@ def swagger_ui():
     </head>
     <body>
         <div class="header">
-            <h1>🤖 Gemini AI API Documentation</h1>
-            <p>Version 1.0 - Flask + Gemini AI</p>
+            <h1>🤖 OpenAI AI API Documentation</h1>
+            <p>Version 1.0 - Flask + OpenAI AI</p>
         </div>
         <div class="container">
             <div class="endpoint">
@@ -189,7 +189,7 @@ def swagger_ui():
             <div class="endpoint">
                 <div><span class="method">GET</span><span class="path">/api/status</span></div>
                 <p>Get API status and available endpoints</p>
-                <pre>Response: {"service": "Gemini AI API", "status": "running"}</pre>
+                <pre>Response: {"service": "OpenAI AI API", "status": "running"}</pre>
             </div>
 
             <div class="endpoint">

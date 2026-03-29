@@ -1,4 +1,4 @@
-﻿namespace ELearning_ToanHocHay_Control.Models.DTOs.Student.Dashboard
+namespace ELearning_ToanHocHay_Control.Models.DTOs.Student.Dashboard
 {
     public class RecentLessonDto
     {
@@ -11,5 +11,9 @@
         public bool IsCompleted { get; set; }
         public int ProgressPercentage { get; set; }  // Nếu chưa hoàn thành
         public double? Score { get; set; }
+
+        // Mới thêm cho Parent Dashboard
+        public int? AttemptId { get; set; }
+        public int? TabSwitchCount { get; set; }
     }
 }

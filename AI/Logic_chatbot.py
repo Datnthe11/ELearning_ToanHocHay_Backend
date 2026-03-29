@@ -1,26 +1,29 @@
-import logging
+import openai
 import os
+# Clean up proxy environment variables that cause issues with OpenAI v1.x
+for key in ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"]:
+    if key in os.environ:
+        os.environ.pop(key)
 import json
+import logging
+import httpx
 from enum import Enum
 from typing import Dict
 from dotenv import load_dotenv
-import google.generativeai as genai
 
 # Load environment variables
 load_dotenv()
 
-# Disable logging
 # Bật logging để debug
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
-# logger.disabled = True # Enable logger for debugging
 
 try:
-    from Config_manager import api_key_manager
+    from AI_model.Openai_api import api_key_manager
 except ImportError:
     import sys
     sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-    from Config_manager import api_key_manager
+    from AI_model.Openai_api import api_key_manager
 
 
 # ==================== USER STATE ====================
@@ -51,13 +54,17 @@ class ChatbotLogicBackend:
     def __init__(self):
         self.users: Dict[str, User] = {}
         self.api_manager = api_key_manager
-        self.api_manager.configure()
-        self.model_name = "gemini-2.5-flash"
+        self.model_name = "gpt-4o-mini"
         self._init_model()
     
     def _init_model(self):
-        """Initialize Gemini model"""
-        self.model = genai.GenerativeModel(self.model_name)
+        """Initialize OpenAI configuration"""
+        from openai import OpenAI
+        # Inject an explicit httpx client to bypass the internal 'proxies' error
+        self.client = OpenAI(
+            api_key=self.api_manager.get_current_key(),
+            http_client=httpx.Client()
+        )
 
     def get_user(self, user_id: str) -> User:
         if user_id not in self.users:
@@ -147,9 +154,14 @@ class ChatbotLogicBackend:
     def _call_llm_with_retry(self, user: User, text: str) -> Dict:
         """Call LLM with retry logic on key rotation"""
         max_retries = len(self.api_manager.api_keys)
+        # Import OpenAI v1.0+ classes (excluding OpenAI client if it causes proxies issue)
+        from openai import RateLimitError, APIError
         
         for attempt in range(max_retries):
             try:
+                # Update key for the client instance
+                self.client.api_key = self.api_manager.get_current_key()
+                
                 # Prompt cho LLM
                 system_prompt = (
                     "Bạn là trợ lý ảo thông minh của web toán học hay, khi người dùng hỏi hãy trả lời lịch sự. "
@@ -171,22 +183,23 @@ class ChatbotLogicBackend:
                     "Hãy trả lời với format JSON: {\"flow\": \"<flow_name>\", \"message\": \"<your_response>\"}"
                 )
                 
-                prompt = f"{system_prompt}\n\nUser message: {text}"
+                # Gọi OpenAI API (v1.0+) - using client completions
+                response = self.client.chat.completions.create(
+                    model=self.model_name,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": text}
+                    ],
+                    temperature=0.5,
+                    max_tokens=2000,
+                    response_format={"type": "json_object"}
+                )
                 
-                # Gọi Gemini API
-                response = self.model.generate_content(prompt)
-                response_text = response.text.strip()
+                response_text = response.choices[0].message.content.strip()
                 logger.info(f"LLM response: {response_text}")
                 
-                # Thử parse JSON response (remove markdown backticks nếu có)
+                # Thử parse JSON response
                 try:
-                    # Remove markdown code block markers
-                    if response_text.startswith("```"):
-                        response_text = response_text.split("```")[1]
-                        if response_text.startswith("json"):
-                            response_text = response_text[4:]
-                        response_text = response_text.strip()
-                    
                     result = json.loads(response_text)
                     flow_name = result.get("flow", "fallback")
                     message = result.get("message", "")
@@ -210,30 +223,27 @@ class ChatbotLogicBackend:
                 }
                 
                 handler = flow_handlers.get(flow_name, self._flow_fallback)
-                result = handler(user)
+                result_flow = handler(user)
                 
                 # Thêm LLM message vào response nếu có (chỉ khi không phải fallback)
                 if message and flow_name != "fallback":
-                    if result.get("type") == "quick_reply":
-                        result["message"] = message + "\n" + result.get("message", "")
+                    if result_flow.get("type") == "quick_reply":
+                        result_flow["message"] = message + "\n" + result_flow.get("message", "")
                     else:
-                        result["message"] = message
+                        result_flow["message"] = message
                 
-                return result
+                return result_flow
                 
-            except Exception as e:
-                logger.error(f"API call attempt {attempt + 1} failed: {str(e)}")
-                
+            except (RateLimitError, APIError) as e:
+                logger.error(f"API key error on attempt {attempt + 1}: {str(e)}")
                 if attempt < max_retries - 1:
-                    # Rotate API key and reconfigure
-                    new_key = self.api_manager.rotate_key()
-                    self.api_manager.configure()
-                    # Recreate model with new API key
-                    self._init_model()
+                    self.api_manager.rotate_key()
                     logger.info(f"Retrying with next API key...")
                 else:
-                    logger.error(f"Max retries ({max_retries}) exceeded")
                     return self._flow_fallback(user)
+            except Exception as e:
+                logger.error(f"Unexpected error on attempt {attempt + 1}: {str(e)}")
+                return self._flow_fallback(user)
         
         return self._flow_fallback(user)
 

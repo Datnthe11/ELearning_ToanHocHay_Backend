@@ -1,4 +1,4 @@
-﻿using ELearning_ToanHocHay_Control.Models.DTOs;
+using ELearning_ToanHocHay_Control.Models.DTOs;
 using ELearning_ToanHocHay_Control.Models.DTOs.ExerciseAttempt;
 using ELearning_ToanHocHay_Control.Services.Interfaces;
 using Microsoft.AspNetCore.Http;
@@ -136,6 +136,33 @@ namespace ELearning_ToanHocHay_Control.Controllers
             int studentId)
         {
             var response = await _attemptService.GetStudentHistoryAsync(studentId);
+
+            if (!response.Success)
+                return BadRequest(response);
+
+            return Ok(response);
+        }
+        /// <summary>
+        /// Báo cáo học sinh chuyển tab trong khi làm bài — gửi email cho phụ huynh
+        /// </summary>
+        [HttpPost("{attemptId}/report-tab-switch")]
+        public async Task<ActionResult<ApiResponse<bool>>> ReportTabSwitch(int attemptId)
+        {
+            var response = await _attemptService.ReportTabSwitchAsync(attemptId);
+
+            if (!response.Success)
+                return BadRequest(response);
+
+            return Ok(response);
+        }
+
+        /// <summary>
+        /// Lấy danh sách lịch sử thoát tab của 1 lượt làm bài
+        /// </summary>
+        [HttpGet("{attemptId}/tab-switch-logs")]
+        public async Task<ActionResult<ApiResponse<List<DateTime>>>> GetTabSwitchLogs(int attemptId)
+        {
+            var response = await _attemptService.GetTabSwitchLogsAsync(attemptId);
 
             if (!response.Success)
                 return BadRequest(response);

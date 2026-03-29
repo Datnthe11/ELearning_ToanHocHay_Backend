@@ -1,4 +1,4 @@
-﻿using ELearning_ToanHocHay_Control.Data; // <--- DÒNG NÀY SỬA LỖI ApplicationDbContext
+using ELearning_ToanHocHay_Control.Data; // <--- DÒNG NÀY SỬA LỖI ApplicationDbContext
 using ELearning_ToanHocHay_Control.Data.Entities;
 using ELearning_ToanHocHay_Control.Repositories.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -26,6 +26,13 @@ namespace ELearning_ToanHocHay_Control.Repositories.Implementations
             _context.Questions.Add(question);
             await _context.SaveChangesAsync();
             return question;
+        }
+
+        public async Task<List<Question>> CreateMultipleAsync(List<Question> questions)
+        {
+            _context.Questions.AddRange(questions);
+            await _context.SaveChangesAsync();
+            return questions;
         }
     }
 }

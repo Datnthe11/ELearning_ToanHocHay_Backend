@@ -25,7 +25,7 @@ services:
     ports:
       - "80:8080"
     env_file:
-- .env
+      - .env
     restart: always
 
   # AI chính (Gemini / xử lý core)
@@ -39,6 +39,8 @@ services:
       - "5001:5001"
     env_file:
       - .env
+      - AI/.env
+
 
 volumes:
   pgdata:

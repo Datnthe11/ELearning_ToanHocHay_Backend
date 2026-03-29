@@ -1,10 +1,15 @@
 import openai
 import json
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 import os
+# Clean up proxy environment variables that cause issues with OpenAI v1.x
+for key in ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"]:
+    if key in os.environ:
+        os.environ.pop(key)
 from dotenv import load_dotenv
 import sys
 import requests
+import httpx
 from PIL import Image
 from io import BytesIO
 import logging
@@ -17,7 +22,7 @@ logger = logging.getLogger(__name__)
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from Prompts import hint_prompt, feedback_prompt
+from Prompts import hint_prompt, feedback_prompt, ai_assessment_prompt, ai_roadmap_prompt
 
 # Load environment variables
 load_dotenv()
@@ -64,7 +69,6 @@ class OpenAIAPIKeyManager:
 
 # Initialize API key manager
 api_key_manager = OpenAIAPIKeyManager()
-openai.api_key = api_key_manager.get_current_key()
 
 
 class OpenAIService:
@@ -72,6 +76,12 @@ class OpenAIService:
     
     def __init__(self, model_name: str = "gpt-4o-mini"):
         self.model_name = model_name
+        from openai import OpenAI
+        # Inject an explicit httpx client to bypass the internal 'proxies' error
+        self.client = OpenAI(
+            api_key=api_key_manager.get_current_key(),
+            http_client=httpx.Client()
+        )
     
     # ==================== HINT GENERATION ====================
     def generate_hint(
@@ -132,30 +142,30 @@ class OpenAIService:
             hint_data = json.loads(response_text)
             
             return {
-                "HintText": hint_data.get("hint_text", response_text),
-                "HintLevel": hint_level,
-                "QuestionId": question_id,
-                "Status": "success"
+                "hint_text": hint_data.get("hint_text", response_text),
+                "hint_level": hint_level,
+                "question_id": question_id,
+                "status": "success"
             }
         
         except json.JSONDecodeError as e:
             logger.error(f"JSON decode error: {str(e)}")
             return {
-                "HintText": f"Lỗi xử lý phản hồi AI: {str(e)}",
-                "HintLevel": hint_level,
-                "QuestionId": question_id,
-                "Status": "error",
-                "Error": str(e)
+                "hint_text": f"Lỗi xử lý phản hồi AI: {str(e)}",
+                "hint_level": hint_level,
+                "question_id": question_id,
+                "status": "error",
+                "error": str(e)
             }
         
         except Exception as e:
             logger.error(f"Error generating hint: {str(e)}")
             return {
-                "HintText": f"Lỗi tạo gợi ý: {str(e)}",
-                "HintLevel": hint_level,
-                "QuestionId": question_id,
-                "Status": "error",
-                "Error": str(e)
+                "hint_text": f"Lỗi tạo gợi ý: {str(e)}",
+                "hint_level": hint_level,
+                "question_id": question_id,
+                "status": "error",
+                "error": str(e)
             }
     
     # ==================== FEEDBACK GENERATION ====================
@@ -221,12 +231,12 @@ class OpenAIService:
             
             if response.get("Status") == "error":
                 return {
-                    "FullSolution": response.get("text", "Lỗi tạo feedback"),
-                    "MistakeAnalysis": "",
-                    "ImprovementAdvice": "",
-                    "AttemptId": attempt_id,
-                    "Status": "error",
-                    "Error": response.get("Error")
+                    "full_solution": response.get("text", "Lỗi tạo feedback"),
+                    "mistake_analysis": "",
+                    "improvement_advice": "",
+                    "attempt_id": attempt_id,
+                    "status": "error",
+                    "error": response.get("Error")
                 }
             
             # Parse JSON response
@@ -234,33 +244,93 @@ class OpenAIService:
             feedback_data = json.loads(response_text)
             
             return {
-                "FullSolution": feedback_data.get("full_solution", ""),
-                "MistakeAnalysis": feedback_data.get("mistake_analysis", ""),
-                "ImprovementAdvice": feedback_data.get("improvement_advice", ""),
-                "AttemptId": attempt_id,
-                "Status": "success"
+                "full_solution": feedback_data.get("full_solution", ""),
+                "mistake_analysis": feedback_data.get("mistake_analysis", ""),
+                "improvement_advice": feedback_data.get("improvement_advice", ""),
+                "attempt_id": attempt_id,
+                "status": "success"
             }
         
         except json.JSONDecodeError as e:
             logger.error(f"JSON decode error: {str(e)}")
             return {
-                "FullSolution": f"Lỗi xử lý phản hồi AI: {str(e)}",
-                "MistakeAnalysis": "",
-                "ImprovementAdvice": "",
-                "AttemptId": attempt_id,
-                "Status": "error",
-                "Error": str(e)
+                "full_solution": f"Lỗi xử lý phản hồi AI: {str(e)}",
+                "mistake_analysis": "",
+                "improvement_advice": "",
+                "attempt_id": attempt_id,
+                "status": "error",
+                "error": str(e)
             }
         
         except Exception as e:
             logger.error(f"Error generating feedback: {str(e)}")
             return {
-                "FullSolution": f"Lỗi tạo feedback: {str(e)}",
-                "MistakeAnalysis": "",
-                "ImprovementAdvice": "",
-                "AttemptId": attempt_id,
-                "Status": "error",
-                "Error": str(e)
+                "full_solution": f"Lỗi tạo feedback: {str(e)}",
+                "mistake_analysis": "",
+                "improvement_advice": "",
+                "attempt_id": attempt_id,
+                "status": "error",
+                "error": str(e)
+            }
+            
+    # ==================== INSIGHT GENERATION ====================
+    def generate_insight(
+        self,
+        question_text: str,
+        student_answer: str,
+        correct_answer: str,
+        insight_type: str = "assessment"
+    ) -> Dict[str, Any]:
+        """
+        Generate educational insights (assessment or roadmap) based on student data.
+        """
+        try:
+            if insight_type == "roadmap":
+                prompt_template = ai_roadmap_prompt
+            else:
+                prompt_template = ai_assessment_prompt
+            
+            formatted_prompt = prompt_template.format(
+                question_text=question_text,
+                student_answer=student_answer,
+                correct_answer=correct_answer
+            )
+            
+            formatted_prompt += """\n\nCung cấp phản hồi dưới dạng JSON với cấu trúc:
+{
+    "concepts_to_review": ["Khái niệm 1", "Khái niệm 2"],
+    "recommended_exercises": ["Bài tập 1", "Bài tập 2"],
+    "quick_tips": ["Mẹo 1", "Mẹo 2"],
+    "summary": "Tóm tắt ngắn gọn nhận xét cho em..."
+}"""
+            
+            messages = self._prepare_messages_with_image(formatted_prompt, None)
+            
+            response = self._call_api_with_retry(messages)
+            
+            if response.get("Status") == "error":
+                return {
+                    "status": "error",
+                    "error": response.get("Error", "Unknown error")
+                }
+            
+            response_text = response.get("text", "")
+            insight_data = json.loads(response_text)
+            
+            return {
+                "concepts_to_review": insight_data.get("concepts_to_review", []),
+                "recommended_exercises": insight_data.get("recommended_exercises", []),
+                "quick_tips": insight_data.get("quick_tips", []),
+                "summary": insight_data.get("summary", ""),
+                "status": "success"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error generating insight ({insight_type}): {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "summary": f"AI đang gặp khó khăn khi tạo {insight_type}. Vui lòng thử lại sau giây lát."
             }
     
     # ==================== HELPER METHODS ====================
@@ -328,15 +398,21 @@ class OpenAIService:
     def _call_api_with_retry(self, messages: List[Dict]) -> Dict:
         """Call OpenAI API with retry logic on key rotation"""
         max_retries = len(api_key_manager.api_keys)
+        # Import errors for v1.0+
+        from openai import RateLimitError, APIError
         
         for attempt in range(max_retries):
             try:
-                response = openai.ChatCompletion.create(
+                # Update key for the client instance
+                self.client.api_key = api_key_manager.get_current_key()
+                
+                # Using the client-based completions interface
+                response = self.client.chat.completions.create(
                     model=self.model_name,
                     messages=messages,
                     temperature=0.7,
                     max_tokens=2000,
-                    response_format={"type": "json_object"}  # Force JSON response
+                    response_format={"type": "json_object"}
                 )
                 
                 response_text = response.choices[0].message.content
@@ -346,13 +422,12 @@ class OpenAIService:
                     "Status": "success"
                 }
             
-            except openai.error.RateLimitError as e:
+            except RateLimitError as e:
                 logger.error(f"Rate limit hit on attempt {attempt + 1}: {str(e)}")
                 
                 if attempt < max_retries - 1:
                     # Rotate API key on rate limit
-                    new_key = api_key_manager.rotate_key()
-                    openai.api_key = new_key
+                    api_key_manager.rotate_key()
                 else:
                     return {
                         "text": f"API Rate Limit after {max_retries} attempts: {str(e)}",
@@ -360,12 +435,11 @@ class OpenAIService:
                         "Error": str(e)
                     }
             
-            except openai.error.APIError as e:
+            except APIError as e:
                 logger.error(f"API error on attempt {attempt + 1}: {str(e)}")
                 
                 if attempt < max_retries - 1:
-                    new_key = api_key_manager.rotate_key()
-                    openai.api_key = new_key
+                    api_key_manager.rotate_key()
                 else:
                     return {
                         "text": f"API Error after {max_retries} attempts: {str(e)}",
@@ -377,8 +451,7 @@ class OpenAIService:
                 logger.error(f"Unexpected error on attempt {attempt + 1}: {str(e)}")
                 
                 if attempt < max_retries - 1:
-                    new_key = api_key_manager.rotate_key()
-                    openai.api_key = new_key
+                    api_key_manager.rotate_key()
                 else:
                     return {
                         "text": f"Error after {max_retries} attempts: {str(e)}",
@@ -422,7 +495,7 @@ async def get_ai_hint(
     question_data: Dict,
     student_answer: str,
     hint_level: int = 1
-) -> Dict[str, str]:
+) -> Dict[str, Any]:
     """
     Standalone function to get AI hint using OpenAI.
     
@@ -458,7 +531,7 @@ async def get_ai_feedback(
     student_answer_data: Dict,
     correct_answer: str,
     is_correct: bool
-) -> Dict[str, str]:
+) -> Dict[str, Any]:
     """
     Standalone function to get AI feedback using OpenAI.
     

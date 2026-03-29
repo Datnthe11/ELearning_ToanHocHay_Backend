@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+using AutoMapper;
 using ELearning_ToanHocHay_Control.Data.Entities;
 using ELearning_ToanHocHay_Control.Models.DTOs;
 using ELearning_ToanHocHay_Control.Models.DTOs.Exercise;
@@ -133,13 +133,14 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
         {
             try
             {
-                var _exercise = await _exerciseRepository.GetAllAsync();
-                return ApiResponse<IEnumerable<ExerciseDto>>.SuccessResponse(_mapper.Map<IEnumerable<ExerciseDto>>(_exercise), "Exercises retrieved successfully");
+                var exercises = await _exerciseRepository.GetAllAsync();
+                var activeExercises = exercises.Where(e => e.IsActive == true);
+                return ApiResponse<IEnumerable<ExerciseDto>>.SuccessResponse(_mapper.Map<IEnumerable<ExerciseDto>>(activeExercises), "Exercises retrieved successfully");
             }
             catch (Exception ex)
             {
                 return ApiResponse<IEnumerable<ExerciseDto>>.ErrorResponse(
-                    "Error retrieving users",
+                    "Error retrieving exercises",
                     new List<string> { ex.Message }
                 );
             }
@@ -148,8 +149,9 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
         public async Task<ApiResponse<IEnumerable<ExerciseDto>>> GetByChapterIdAsync(int chapterId)
         {
             var exercises = await _exerciseRepository.GetByChapterIdAsync(chapterId);
+            var activeExercises = exercises.Where(e => e.IsActive == true);
             return ApiResponse<IEnumerable<ExerciseDto>>
-                .SuccessResponse(_mapper.Map<IEnumerable<ExerciseDto>>(exercises));
+                .SuccessResponse(_mapper.Map<IEnumerable<ExerciseDto>>(activeExercises));
         }
 
         // Trong ExerciseService.cs của Backend
@@ -188,15 +190,17 @@ namespace ELearning_ToanHocHay_Control.Services.Implementations
         public async Task<ApiResponse<IEnumerable<ExerciseDto>>> GetByLessonIdAsync(int lessonId)
         {
             var exercises = await _exerciseRepository.GetByLessonIdAsync(lessonId);
+            var activeExercises = exercises.Where(e => e.IsActive == true);
             return ApiResponse<IEnumerable<ExerciseDto>>
-                .SuccessResponse(_mapper.Map<IEnumerable<ExerciseDto>>(exercises));
+                .SuccessResponse(_mapper.Map<IEnumerable<ExerciseDto>>(activeExercises));
         }
 
         public async Task<ApiResponse<IEnumerable<ExerciseDto>>> GetByTopicIdAsync(int topicId)
         {
             var exercises = await _exerciseRepository.GetByTopicIdAsync(topicId);
+            var activeExercises = exercises.Where(e => e.IsActive == true);
             return ApiResponse<IEnumerable<ExerciseDto>>
-                .SuccessResponse(_mapper.Map<IEnumerable<ExerciseDto>>(exercises));
+                .SuccessResponse(_mapper.Map<IEnumerable<ExerciseDto>>(activeExercises));
         }
         /*public async Task<ApiResponse<IEnumerable<ExerciseQuestionDto>>> GetExerciseQuestionsAsync(int exerciseId)
         {

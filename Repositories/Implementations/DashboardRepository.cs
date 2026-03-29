@@ -164,15 +164,26 @@ namespace ELearning_ToanHocHay_Control.Repositories.Implementations
                 .Take(limit)
                 .ToListAsync();
 
+            if (!raw.Any()) return new List<RecentLessonModel>();
+
+            var attemptIds = raw.Select(a => a.AttemptId).ToList();
+            var tabSwitchCounts = await _context.TabSwitchLogs
+                .Where(l => attemptIds.Contains(l.AttemptId))
+                .GroupBy(l => l.AttemptId)
+                .Select(g => new { AttemptId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.AttemptId, x => x.Count);
+
             return raw
-                .Where(a => a.Exercise?.Topic != null)
+                .Where(a => a.Exercise != null) // ← bỏ check Topic
                 .Select(a => new RecentLessonModel
                 {
-                    LessonId = a.Exercise.Topic.Lessons?.FirstOrDefault()?.LessonId ?? 0,
-                    LessonName = a.Exercise.Topic.Lessons?.FirstOrDefault()?.LessonName
-                                      ?? a.Exercise.Topic.TopicName,
-                    TopicName = a.Exercise.Topic.TopicName ?? "N/A",
-                    ChapterName = a.Exercise.Topic.Chapter?.ChapterName ?? "N/A",
+                    LessonId = a.Exercise.Topic?.Lessons?.FirstOrDefault()?.LessonId ?? 0,
+                    LessonName = a.Exercise.Topic?.Lessons?.FirstOrDefault()?.LessonName
+                                      ?? a.Exercise.Topic?.TopicName
+                                      ?? a.Exercise.ExerciseName, // ← fallback
+                    TopicName = a.Exercise.Topic?.TopicName ?? a.Exercise.ExerciseName ?? "N/A",
+                    ChapterName = a.Exercise.Topic?.Chapter?.ChapterName
+                               ?? a.Exercise.Chapter?.ChapterName ?? "N/A",
                     CompletedAt = a.SubmittedAt,
                     DurationMinutes = a.SubmittedAt.HasValue
                         ? (int)(a.SubmittedAt.Value - a.StartTime).TotalMinutes
@@ -180,8 +191,10 @@ namespace ELearning_ToanHocHay_Control.Repositories.Implementations
                     IsCompleted = true,
                     ProgressPercentage = 100,
                     Score = a.MaxScore > 0
-                        ? Math.Round((double)a.TotalScore / (double)a.MaxScore * 10.0, 1)
-                        : (double?)null  // ✅ FIX: thang 10 thay vì *100
+                        ? Math.Round((double)a.TotalScore / (double)a.MaxScore * 10.0, 2) // ← 2 chữ số
+                        : (double?)null,
+                    AttemptId = a.AttemptId,
+                    TabSwitchCount = tabSwitchCounts.ContainsKey(a.AttemptId) ? tabSwitchCounts[a.AttemptId] : 0
                 }).ToList();
         }
 

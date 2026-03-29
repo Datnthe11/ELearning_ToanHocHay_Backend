@@ -1,4 +1,4 @@
-﻿namespace ELearning_ToanHocHay_Control.Models
+namespace ELearning_ToanHocHay_Control.Models
 {
     public class RecentLessonModel
     {
@@ -11,5 +11,8 @@
         public bool IsCompleted { get; set; }
         public int ProgressPercentage { get; set; }
         public double? Score { get; set; } // THÊM DÒNG NÀY
+        // Mới thêm cho tính năng theo dõi vi phạm
+        public int? AttemptId { get; set; }
+        public int? TabSwitchCount { get; set; }
     }
 }

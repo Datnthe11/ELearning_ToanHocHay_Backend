@@ -34,7 +34,7 @@ logging.getLogger('werkzeug').setLevel(logging.INFO)
 # ==================== IMPORTS ====================
 try:
     from Logic_chatbot import ChatbotLogicBackend, UserState
-    from AI_model.Gemini_api import GeminiAIService
+    from AI_model.Openai_api import OpenAIService
     logger_msg = "Successfully imported all AI modules"
 except ImportError as e:
     logger_msg = f"Import error: {str(e)}"
@@ -49,7 +49,7 @@ app.config['JSON_SORT_KEYS'] = False
 
 # Khởi tạo các service
 chatbot = ChatbotLogicBackend()
-gemini_ai = GeminiAIService()
+openai_ai = OpenAIService()
 
 @app.before_request
 def log_request_info():
@@ -165,7 +165,7 @@ def generate_hint():
         if not is_valid: return jsonify({"error": error}), 400
 
         logger.info(f"[AI] Generating hint for: {data.get('question_text')[:50]}...")
-        result = gemini_ai.generate_hint(
+        result = openai_ai.generate_hint(
             question_text=data.get('question_text'),
             question_type=data.get('question_type'),
             difficulty_level=data.get('difficulty_level'),
@@ -190,7 +190,7 @@ def generate_hints_batch():
     results = []
     for idx, hint in enumerate(data['hints']):
         try:
-            result = gemini_ai.generate_hint(
+            result = openai_ai.generate_hint(
                 question_text=hint.get('question_text'),
                 question_type=hint.get('question_type'),
                 difficulty_level=hint.get('difficulty_level'),
@@ -216,7 +216,7 @@ def generate_feedback():
         if not is_valid: return jsonify({"error": error}), 400
 
         logger.info(f"[AI] Generating feedback for attempt: {data.get('attempt_id')}")
-        result = gemini_ai.generate_feedback(
+        result = openai_ai.generate_feedback(
             question_text=data.get('question_text'),
             question_type=data.get('question_type'),
             student_answer=data.get('student_answer'),
@@ -240,7 +240,7 @@ def generate_ai_insight():
         if not is_valid: return jsonify({"error": error}), 400
 
         logger.info(f"[AI] Generating insight for: {data.get('question_text')[:50]}...")
-        result = gemini_ai.generate_insight(
+        result = openai_ai.generate_insight(
             question_text=data.get('question_text'),
             student_answer=data.get('student_answer'),
             correct_answer=data.get('correct_answer'),
@@ -261,7 +261,7 @@ def generate_feedback_batch():
     results = []
     for idx, fb in enumerate(data['feedbacks']):
         try:
-            result = gemini_ai.generate_feedback(
+            result = openai_ai.generate_feedback(
                 question_text=fb.get('question_text'),
                 question_type=fb.get('question_type'),
                 student_answer=fb.get('student_answer'),
@@ -290,7 +290,7 @@ def status():
     return jsonify({
         "status": "running",
         "chatbot_users": len(chatbot.users),
-        "ai_model": gemini_ai.model_name
+        "ai_model": openai_ai.model_name
     }), 200
 
 @app.route('/', methods=['GET'])
